@@ -35,11 +35,9 @@ namespace FlappyBoids.Editor
             Root + "/Imported/IdleTogetherUI/Fonts/FusionPixel12Latin.ttf";
         private const string IdleFrameSpritePath =
             Root + "/Imported/IdleTogetherUI/Textures/FrameBlueDoubleBorder.png";
-        private const string IdleTitleSpritePath =
-            Root + "/Imported/IdleTogetherUI/Textures/PanelBlueRelief.png";
         private const string IdlePanelSpritePath =
             Root + "/Imported/IdleTogetherUI/Textures/PanelGrayRelief.png";
-        private const string ExternalAssetSceneMarker = "Ready Panel - IdleTogether Pixel Frame";
+        private const string ExternalAssetSceneMarker = "Ready Panel - Abyss Amber Palette v2";
 
         [InitializeOnLoadMethod]
         private static void QueueExternalAssetSceneUpgrade()
@@ -154,15 +152,15 @@ namespace FlappyBoids.Editor
         {
             return new Materials
             {
-                Pipe = CreateMaterial("M_Pipe_Aged", new Color(0.055f, 0.23f, 0.20f), 0.32f),
-                PipeAccent = CreateMaterial("M_Pipe_SafetyRing", new Color(0.95f, 0.52f, 0.12f), 0.48f, true),
-                Seabed = CreateMaterial("M_Seabed", new Color(0.25f, 0.28f, 0.22f), 0.08f),
+                Pipe = CreateMaterial("M_Pipe_Aged", new Color(0.025f, 0.08f, 0.07f), 0.20f, false, true),
+                PipeAccent = CreateMaterial("M_Pipe_SafetyRing", new Color(0.85f, 0.20f, 0.03f), 0.06f, false, true),
+                Seabed = CreateMaterial("M_Seabed", new Color(0.26f, 0.25f, 0.18f), 0.08f),
                 WaterSurface = LoadRequiredAsset<Material>(WaterMaterialPath),
-                Guide = CreateMaterial("M_Guide_Bioluminescent", new Color(0.08f, 0.72f, 0.68f), 0.25f, true),
-                FishBlue = CreateMaterial("M_Fish_Blue", new Color(0.10f, 0.74f, 0.88f), 0.58f, true),
-                FishGold = CreateMaterial("M_Fish_Gold", new Color(1.00f, 0.68f, 0.12f), 0.58f, true),
-                FishCoral = CreateMaterial("M_Fish_Coral", new Color(1.00f, 0.27f, 0.31f), 0.58f, true),
-                FishFin = CreateMaterial("M_Fish_Fin", new Color(0.025f, 0.15f, 0.18f), 0.42f),
+                Guide = CreateMaterial("M_Guide_Bioluminescent", new Color(0.29f, 0.68f, 0.42f), 0.22f, true),
+                FishBlue = CreateMaterial("M_Fish_Blue", new Color(0.20f, 0.58f, 0.82f), 0.34f),
+                FishGold = CreateMaterial("M_Fish_Gold", new Color(1.0f, 0.74f, 0.26f), 0.34f),
+                FishCoral = CreateMaterial("M_Fish_Coral", new Color(1.0f, 0.39f, 0.22f), 0.34f),
+                FishFin = CreateMaterial("M_Fish_Fin", new Color(0.04f, 0.16f, 0.18f), 0.36f),
                 FishEye = CreateMaterial("M_Fish_Eye", new Color(0.006f, 0.012f, 0.018f), 0.82f)
             };
         }
@@ -175,11 +173,14 @@ namespace FlappyBoids.Editor
             return asset;
         }
 
-        private static Material CreateMaterial(string name, Color color, float smoothness, bool emission = false)
+        private static Material CreateMaterial(
+            string name, Color color, float smoothness, bool emission = false, bool unlit = false)
         {
             string path = $"{MaterialFolder}/{name}.mat";
             Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            Shader shader = unlit
+                ? Shader.Find("Universal Render Pipeline/Unlit")
+                : Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             if (material == null)
             {
                 material = new Material(shader) { name = name };
@@ -193,10 +194,17 @@ namespace FlappyBoids.Editor
             material.color = color;
             if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
             if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", smoothness);
+            if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0f);
             if (emission && material.HasProperty("_EmissionColor"))
             {
                 material.EnableKeyword("_EMISSION");
-                material.SetColor("_EmissionColor", color * 1.5f);
+                material.SetColor("_EmissionColor", color * 0.65f);
+                material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+            }
+            else if (material.HasProperty("_EmissionColor"))
+            {
+                material.DisableKeyword("_EMISSION");
+                material.SetColor("_EmissionColor", Color.black);
             }
             EditorUtility.SetDirty(material);
             return material;
@@ -318,24 +326,24 @@ namespace FlappyBoids.Editor
         private static GameObject CreateIdleTogetherUiFramePrefab()
         {
             Sprite frameSprite = LoadRequiredAsset<Sprite>(IdleFrameSpritePath);
-            Sprite titleSprite = LoadRequiredAsset<Sprite>(IdleTitleSpritePath);
             Sprite panelSprite = LoadRequiredAsset<Sprite>(IdlePanelSpritePath);
 
             var root = new GameObject(
                 "P_IdleTogetherPixelFrame", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             RectTransform rootRect = root.GetComponent<RectTransform>();
             rootRect.sizeDelta = new Vector2(620f, 350f);
-            ConfigureSlicedImage(root.GetComponent<Image>(), frameSprite, Color.white);
+            ConfigureSlicedImage(
+                root.GetComponent<Image>(), frameSprite, new Color(0.28f, 0.35f, 0.32f, 1f));
 
             RectTransform content = CreateUiImage(
-                "Content Backdrop", rootRect, panelSprite, new Color(0.16f, 0.28f, 0.34f, 0.97f));
+                "Content Backdrop", rootRect, panelSprite, new Color(0.055f, 0.09f, 0.105f, 0.98f));
             content.anchorMin = Vector2.zero;
             content.anchorMax = Vector2.one;
             content.offsetMin = new Vector2(12f, 12f);
             content.offsetMax = new Vector2(-12f, -58f);
 
             RectTransform title = CreateUiImage(
-                "Title Band", rootRect, titleSprite, new Color(0.20f, 0.52f, 0.64f, 1f));
+                "Title Band", rootRect, panelSprite, new Color(0.72f, 0.31f, 0.12f, 1f));
             title.anchorMin = new Vector2(0f, 1f);
             title.anchorMax = Vector2.one;
             title.pivot = new Vector2(0.5f, 1f);
@@ -388,14 +396,14 @@ namespace FlappyBoids.Editor
             var cameraObject = new GameObject("TPS Flock Camera");
             cameraObject.transform.SetParent(cameras, false);
             cameraObject.tag = "MainCamera";
-            cameraObject.transform.position = new Vector3(0f, 3.95f, -9.4f);
-            cameraObject.transform.rotation = Quaternion.LookRotation(new Vector3(0f, 2.25f, 13.9f));
+            cameraObject.transform.position = new Vector3(0f, 4.30f, -9.4f);
+            cameraObject.transform.rotation = Quaternion.LookRotation(new Vector3(0f, 1.35f, 13.9f));
             Camera camera = cameraObject.AddComponent<Camera>();
             camera.fieldOfView = 59f;
             camera.nearClipPlane = 0.12f;
             camera.farClipPlane = 330f;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.015f, 0.13f, 0.18f);
+            camera.backgroundColor = new Color(0.018f, 0.09f, 0.105f);
             cameraObject.AddComponent<AudioListener>();
             FlappyBoidsCamera followCamera = cameraObject.AddComponent<FlappyBoidsCamera>();
             GameObject cameraBubbles = InstantiatePrefab(
@@ -403,14 +411,25 @@ namespace FlappyBoids.Editor
             cameraBubbles.transform.localPosition = new Vector3(0f, -2.5f, 5.5f);
             cameraBubbles.transform.localScale = Vector3.one * 0.035f;
 
+            var diveLightObject = new GameObject("School Dive Light");
+            diveLightObject.transform.SetParent(cameraObject.transform, false);
+            Light diveLight = diveLightObject.AddComponent<Light>();
+            diveLight.type = LightType.Spot;
+            diveLight.color = new Color(0.72f, 0.82f, 0.68f);
+            diveLight.intensity = 18f;
+            diveLight.range = 18f;
+            diveLight.spotAngle = 58f;
+            diveLight.innerSpotAngle = 38f;
+            diveLight.shadows = LightShadows.None;
+
             Transform lighting = Group("03_Lighting", gameRoot.transform);
             var lightObject = new GameObject("Course Light");
             lightObject.transform.SetParent(lighting, false);
             lightObject.transform.rotation = Quaternion.Euler(38f, -28f, 0f);
             Light sun = lightObject.AddComponent<Light>();
             sun.type = LightType.Directional;
-            sun.color = new Color(0.48f, 0.90f, 0.92f);
-            sun.intensity = 1.15f;
+            sun.color = new Color(0.66f, 0.82f, 0.72f);
+            sun.intensity = 0.88f;
             sun.shadows = LightShadows.Soft;
             RenderSettings.sun = sun;
 
@@ -436,9 +455,9 @@ namespace FlappyBoids.Editor
             CreatePart(PrimitiveType.Cube, "Seabed", corridor, new Vector3(0f, -0.24f, 117f),
                 new Vector3(19f, 0.48f, 280f), materials.Seabed);
             GameObject waterSurface = CreatePart(PrimitiveType.Plane, "Uber Water Surface (MIT Asset)", corridor,
-                new Vector3(0f, GateWall.CorridorHeight + 0.42f, 117f),
+                new Vector3(0f, GateWall.CorridorHeight + 18f, 117f),
                 new Vector3(1.9f, 1f, 28f), materials.WaterSurface, false);
-            waterSurface.transform.localRotation = Quaternion.Euler(0f, 0f, 180f);
+            waterSurface.transform.localRotation = Quaternion.identity;
             CreatePart(PrimitiveType.Cube, "Left Tunnel Edge", corridor,
                 new Vector3(-GateWall.CorridorHalfWidth - 0.2f, GateWall.CorridorHeight * 0.5f, 117f),
                 new Vector3(0.4f, GateWall.CorridorHeight, 280f), materials.Seabed);
@@ -556,39 +575,40 @@ namespace FlappyBoids.Editor
             Font font = LoadRequiredAsset<Font>(IdleBodyFontPath);
             Font headingFont = LoadRequiredAsset<Font>(IdleHeadingFontPath);
             Sprite panelSprite = LoadRequiredAsset<Sprite>(IdlePanelSpritePath);
-            Color panelColor = new Color(0.018f, 0.045f, 0.085f, 0.90f);
-            Color cyan = new Color(0.48f, 0.92f, 1f, 1f);
-            Color body = new Color(0.85f, 0.92f, 1f, 1f);
-            Color gold = new Color(1f, 0.76f, 0.22f, 1f);
+            Color panelColor = new Color(0.055f, 0.085f, 0.10f, 0.96f);
+            Color primary = new Color(0.91f, 0.87f, 0.74f, 1f);
+            Color secondary = new Color(0.60f, 0.68f, 0.59f, 1f);
+            Color accent = new Color(1f, 0.44f, 0.16f, 1f);
+            Color amber = new Color(0.95f, 0.66f, 0.24f, 1f);
 
             RectTransform schoolPanel = CreateUiPanel(
                 "School Counter", canvasObject.transform, new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(137f, -63f), new Vector2(230f, 82f), panelColor, panelSprite);
-            CreateUiText("Label", schoolPanel, "SCHOOL REMAINING", font, 14, cyan,
+            CreateUiText("Label", schoolPanel, "SCHOOL REMAINING", font, 14, secondary,
                 TextAnchor.MiddleCenter, new Vector2(0f, 20f), new Vector2(210f, 24f), FontStyle.Bold);
             Text schoolCount = CreateUiText("Value", schoolPanel, $"{BoidSwarm.StartingBoids:00} / {BoidSwarm.StartingBoids}",
-                font, 28, Color.white, TextAnchor.MiddleCenter, new Vector2(0f, -10f), new Vector2(210f, 42f), FontStyle.Bold);
+                font, 28, primary, TextAnchor.MiddleCenter, new Vector2(0f, -10f), new Vector2(210f, 42f), FontStyle.Bold);
 
             RectTransform pipesPanel = CreateUiPanel(
                 "Pipe Counter", canvasObject.transform, new Vector2(1f, 1f), new Vector2(1f, 1f),
                 new Vector2(-137f, -63f), new Vector2(230f, 82f), panelColor, panelSprite);
-            CreateUiText("Label", pipesPanel, "PIPES CLEARED", font, 14, cyan,
+            CreateUiText("Label", pipesPanel, "PIPES CLEARED", font, 14, secondary,
                 TextAnchor.MiddleCenter, new Vector2(0f, 20f), new Vector2(210f, 24f), FontStyle.Bold);
             Text pipeCount = CreateUiText("Value", pipesPanel, $"00 / {FlappyBoidsGame.TotalGates}",
-                font, 28, Color.white, TextAnchor.MiddleCenter, new Vector2(0f, -10f), new Vector2(210f, 42f), FontStyle.Bold);
+                font, 28, primary, TextAnchor.MiddleCenter, new Vector2(0f, -10f), new Vector2(210f, 42f), FontStyle.Bold);
 
             RectTransform routePanel = CreateUiPanel(
                 "Route Guidance", canvasObject.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                 new Vector2(0f, -54f), new Vector2(390f, 68f), panelColor, panelSprite);
             Text routeStatus = CreateUiText("Next Pipe + Flock Fit", routePanel,
-                "NEXT PIPE  23m    FLOCK FIT  100%", font, 14, cyan,
+                "NEXT PIPE  23m    FLOCK FIT  100%", font, 17, primary,
                 TextAnchor.MiddleCenter, new Vector2(0f, 17f), new Vector2(370f, 24f), FontStyle.Bold);
             RectTransform fitBackground = CreateUiPanel(
                 "Flock Fit Bar", routePanel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(0f, -18f), new Vector2(350f, 12f), new Color(0.01f, 0.025f, 0.045f, 0.95f));
             RectTransform fillRect = CreateUiPanel(
                 "Fill", fitBackground, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                Vector2.zero, new Vector2(346f, 8f), new Color(0.12f, 0.95f, 0.78f, 1f));
+                Vector2.zero, new Vector2(346f, 8f), new Color(0.36f, 0.66f, 0.43f, 1f));
             Image fitFill = fillRect.GetComponent<Image>();
             fitFill.type = Image.Type.Filled;
             fitFill.fillMethod = Image.FillMethod.Horizontal;
@@ -596,32 +616,32 @@ namespace FlappyBoids.Editor
             fitFill.fillAmount = 1f;
 
             RectTransform readyPanel = InstantiateUiFrame(
-                uiFramePrefab, canvasObject.transform, "Ready Panel - IdleTogether Pixel Frame",
+                uiFramePrefab, canvasObject.transform, "Ready Panel - Abyss Amber Palette v2",
                 new Vector2(620f, 310f));
             CreateUiText("Title", readyPanel, "FLAPPY BOIDS: DEEP RUN", headingFont, 44,
-                new Color(0.20f, 0.95f, 0.92f), TextAnchor.MiddleCenter,
+                primary, TextAnchor.MiddleCenter,
                 new Vector2(0f, 96f), new Vector2(570f, 64f), FontStyle.Bold);
             CreateUiText("Brief", readyPanel,
                 "Guide the whole school through 12 underwater pipes.\nEvery fish that touches a pipe is lost.",
-                font, 19, body, TextAnchor.MiddleCenter, new Vector2(0f, 25f), new Vector2(540f, 72f));
+                font, 19, primary, TextAnchor.MiddleCenter, new Vector2(0f, 25f), new Vector2(540f, 72f));
             CreateUiText("Controls", readyPanel,
-                "LEFT / RIGHT  STEER        SPACE  KICK + SCHOOL UP", font, 19, gold,
+                "LEFT / RIGHT  STEER        SPACE  KICK + SCHOOL UP", font, 19, accent,
                 TextAnchor.MiddleCenter, new Vector2(0f, -55f), new Vector2(560f, 38f), FontStyle.Bold);
-            CreateUiText("Launch", readyPanel, "PRESS SPACE TO LAUNCH", font, 15, cyan,
+            CreateUiText("Launch", readyPanel, "PRESS SPACE TO LAUNCH", font, 15, amber,
                 TextAnchor.MiddleCenter, new Vector2(0f, -104f), new Vector2(420f, 30f), FontStyle.Bold);
 
             RectTransform resultPanel = InstantiateUiFrame(
-                uiFramePrefab, canvasObject.transform, "Result Panel - IdleTogether Pixel Frame",
+                uiFramePrefab, canvasObject.transform, "Result Panel - Abyss Amber Palette v2",
                 new Vector2(620f, 350f));
             Text resultTitle = CreateUiText("Title", resultPanel, "SCHOOL MADE IT!", headingFont, 44,
-                new Color(0.20f, 0.95f, 0.92f), TextAnchor.MiddleCenter,
+                primary, TextAnchor.MiddleCenter,
                 new Vector2(0f, 112f), new Vector2(570f, 60f), FontStyle.Bold);
             Text resultStats = CreateUiText("Run Stats", resultPanel, "PIPES  00     FINAL FISH  00", font, 20,
-                gold, TextAnchor.MiddleCenter, new Vector2(0f, 40f), new Vector2(540f, 38f), FontStyle.Bold);
+                accent, TextAnchor.MiddleCenter, new Vector2(0f, 40f), new Vector2(540f, 38f), FontStyle.Bold);
             Text resultBest = CreateUiText("Best", resultPanel, "BEST  00 pipes / 00 fish", font, 19,
-                body, TextAnchor.MiddleCenter, new Vector2(0f, -18f), new Vector2(520f, 66f));
+                primary, TextAnchor.MiddleCenter, new Vector2(0f, -18f), new Vector2(520f, 66f));
             CreateUiText("Restart", resultPanel, "SPACE or R  -  SWIM AGAIN", font, 20,
-                gold, TextAnchor.MiddleCenter, new Vector2(0f, -114f), new Vector2(500f, 36f), FontStyle.Bold);
+                amber, TextAnchor.MiddleCenter, new Vector2(0f, -114f), new Vector2(500f, 36f), FontStyle.Bold);
             resultPanel.gameObject.SetActive(false);
 
             hud.ConfigureView(
@@ -731,13 +751,13 @@ namespace FlappyBoids.Editor
             RenderSettings.skybox = null;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.015f, 0.14f, 0.18f);
+            RenderSettings.fogColor = new Color(0.018f, 0.11f, 0.12f);
             RenderSettings.fogStartDistance = 48f;
             RenderSettings.fogEndDistance = 205f;
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.08f, 0.34f, 0.39f);
-            RenderSettings.ambientEquatorColor = new Color(0.025f, 0.17f, 0.21f);
-            RenderSettings.ambientGroundColor = new Color(0.025f, 0.07f, 0.065f);
+            RenderSettings.ambientSkyColor = new Color(0.12f, 0.34f, 0.31f);
+            RenderSettings.ambientEquatorColor = new Color(0.07f, 0.20f, 0.18f);
+            RenderSettings.ambientGroundColor = new Color(0.04f, 0.09f, 0.07f);
             RenderSettings.ambientIntensity = 1.15f;
         }
 

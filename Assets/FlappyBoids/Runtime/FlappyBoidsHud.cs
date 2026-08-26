@@ -66,10 +66,10 @@ namespace FlappyBoids
             {
                 _fitFill.fillAmount = formationFit;
                 _fitFill.color = formationFit >= 0.8f
-                    ? new Color(0.12f, 0.95f, 0.78f, 1f)
+                    ? new Color(0.36f, 0.66f, 0.43f, 1f)
                     : formationFit >= 0.55f
-                        ? new Color(1f, 0.76f, 0.22f, 1f)
-                        : new Color(1f, 0.33f, 0.28f, 1f);
+                        ? new Color(0.95f, 0.58f, 0.18f, 1f)
+                        : new Color(0.88f, 0.25f, 0.16f, 1f);
             }
 
             bool ready = _game.State == FlappyBoidsGame.RunState.Ready;
@@ -78,7 +78,13 @@ namespace FlappyBoids
             if (_resultPanel != null && _resultPanel.activeSelf != gameOver) _resultPanel.SetActive(gameOver);
 
             if (!gameOver) return;
-            if (_resultTitle != null) _resultTitle.text = _game.Won ? "SCHOOL MADE IT!" : "SCHOOL LOST";
+            if (_resultTitle != null)
+            {
+                _resultTitle.text = _game.Won ? "SCHOOL MADE IT!" : "SCHOOL LOST";
+                _resultTitle.color = _game.Won
+                    ? new Color(0.91f, 0.87f, 0.74f, 1f)
+                    : new Color(0.88f, 0.25f, 0.16f, 1f);
+            }
             if (_resultStats != null)
                 _resultStats.text = $"PIPES  {_game.WallsPassed:00}     FINAL FISH  {alive:00}";
             if (_resultBest != null)

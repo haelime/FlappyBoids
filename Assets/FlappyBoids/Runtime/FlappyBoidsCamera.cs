@@ -20,8 +20,8 @@ namespace FlappyBoids
             _game = game;
             _swarm = game.Swarm;
             _camera = GetComponent<Camera>();
-            transform.position = _swarm.Center + new Vector3(0f, -1.35f, -9.4f);
-            transform.LookAt(_swarm.Center + Vector3.forward * 4.2f + Vector3.up * 0.7f);
+            transform.position = _swarm.Center + new Vector3(0f, -1.0f, -9.4f);
+            transform.LookAt(_swarm.Center + Vector3.forward * 4.2f + Vector3.up * 0.35f);
         }
 
         private void LateUpdate()
@@ -42,11 +42,11 @@ namespace FlappyBoids
             pathPoint = _game.GetCameraPathPoint(cameraZ);
             Vector3 desiredPosition = new Vector3(
                 pathPoint.x,
-                Mathf.Max(0.85f, pathPoint.y - 1.55f),
+                Mathf.Max(0.85f, pathPoint.y - 1.10f),
                 cameraZ);
             transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref _velocity, 0.20f);
 
-            Vector3 lookPoint = center + Vector3.forward * 4.8f + Vector3.up * 0.72f;
+            Vector3 lookPoint = center + Vector3.forward * 4.8f + Vector3.up * 0.38f;
             Quaternion look = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
             Quaternion bank = Quaternion.AngleAxis(-_swarm.HorizontalInput * 2.2f, Vector3.forward);
             transform.rotation = Quaternion.Slerp(transform.rotation, look * bank, 7f * Time.deltaTime);

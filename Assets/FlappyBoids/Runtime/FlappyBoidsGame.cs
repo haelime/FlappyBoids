@@ -118,13 +118,7 @@ namespace FlappyBoids
             if (State == RunState.Ready)
             {
                 _swarm.SetInput(horizontal, false);
-                if (flap)
-                {
-                    State = RunState.Playing;
-                    _swarm.Begin();
-                    _swarm.SetInput(horizontal, true);
-                    _audio.PlayFlap();
-                }
+                if (flap) BeginRun(horizontal);
                 return;
             }
 
@@ -164,6 +158,17 @@ namespace FlappyBoids
             _swarm.Stop();
             NewBest = FlappyBoidsRecord.SaveRun(WallsPassed, _swarm.AliveCount);
             _audio.PlayFinish(won);
+        }
+
+        public void BeginRun(float horizontalInput = 0f)
+        {
+            if (!_built) Build();
+            if (!_built || State != RunState.Ready) return;
+
+            State = RunState.Playing;
+            _swarm.Begin();
+            _swarm.SetInput(horizontalInput, true);
+            _audio.PlayFlap();
         }
 
         private void RestartAndLaunch()
@@ -231,7 +236,7 @@ namespace FlappyBoids
         private void OnDrawGizmosSelected()
         {
             if (_authoredGates == null || _authoredGates.Length == 0) return;
-            Gizmos.color = new Color(0.15f, 0.95f, 0.90f, 0.9f);
+            Gizmos.color = new Color(0.95f, 0.48f, 0.16f, 0.9f);
             Vector3 previous = new Vector3(0f, 5.5f, 0f);
             for (int i = 0; i < _authoredGates.Length; i++)
             {
