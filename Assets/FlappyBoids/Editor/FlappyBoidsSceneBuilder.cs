@@ -16,6 +16,7 @@ namespace FlappyBoids.Editor
         private const string MaterialFolder = Root + "/Art/Materials";
         private const string FishPrefabFolder = Root + "/Prefabs/Fish";
         private const string EnvironmentPrefabFolder = Root + "/Prefabs/Environment";
+        private const string UiPrefabFolder = Root + "/Prefabs/UI";
         private const string SceneFolder = Root + "/Scenes";
         private const string ScenePath = SceneFolder + "/FlappyBoids.unity";
         private const string StraightPipeModelPath =
@@ -28,7 +29,17 @@ namespace FlappyBoids.Editor
             Root + "/ThirdParty/URPUnderwaterEffects/Prefabs/BubblesZone.prefab";
         private const string AmbiencePath =
             Root + "/Audio/Ambience/Underwater_Theme_II_CC0.ogg";
-        private const string ExternalAssetSceneMarker = "Uber Water Surface (MIT Asset)";
+        private const string IdleBodyFontPath =
+            Root + "/Imported/IdleTogetherUI/Fonts/FusionPixel10Korean.ttf";
+        private const string IdleHeadingFontPath =
+            Root + "/Imported/IdleTogetherUI/Fonts/FusionPixel12Latin.ttf";
+        private const string IdleFrameSpritePath =
+            Root + "/Imported/IdleTogetherUI/Textures/FrameBlueDoubleBorder.png";
+        private const string IdleTitleSpritePath =
+            Root + "/Imported/IdleTogetherUI/Textures/PanelBlueRelief.png";
+        private const string IdlePanelSpritePath =
+            Root + "/Imported/IdleTogetherUI/Textures/PanelGrayRelief.png";
+        private const string ExternalAssetSceneMarker = "Ready Panel - IdleTogether Pixel Frame";
 
         [InitializeOnLoadMethod]
         private static void QueueExternalAssetSceneUpgrade()
@@ -77,8 +88,11 @@ namespace FlappyBoids.Editor
                 CreateImportedPipePrefab("P_ShortPipe_Corner_CC0", CornerPipeModelPath, materials.Pipe)
             };
             GameObject seaGrassPrefab = CreateSeaGrassPrefab(materials);
+            GameObject uiFramePrefab = CreateIdleTogetherUiFramePrefab();
             GameObject bubblePrefab = LoadRequiredAsset<GameObject>(BubblePrefabPath);
-            CreateScene(materials, fishPrefabs, pipePrefab, shortPipePrefabs, seaGrassPrefab, bubblePrefab);
+            CreateScene(
+                materials, fishPrefabs, pipePrefab, shortPipePrefabs,
+                seaGrassPrefab, bubblePrefab, uiFramePrefab);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             ValidateScenePrefabReferences();
@@ -122,6 +136,7 @@ namespace FlappyBoids.Editor
             EnsureFolder(Root + "/Prefabs");
             EnsureFolder(FishPrefabFolder);
             EnsureFolder(EnvironmentPrefabFolder);
+            EnsureFolder(UiPrefabFolder);
             EnsureFolder(SceneFolder);
         }
 
@@ -300,13 +315,47 @@ namespace FlappyBoids.Editor
             return prefab;
         }
 
+        private static GameObject CreateIdleTogetherUiFramePrefab()
+        {
+            Sprite frameSprite = LoadRequiredAsset<Sprite>(IdleFrameSpritePath);
+            Sprite titleSprite = LoadRequiredAsset<Sprite>(IdleTitleSpritePath);
+            Sprite panelSprite = LoadRequiredAsset<Sprite>(IdlePanelSpritePath);
+
+            var root = new GameObject(
+                "P_IdleTogetherPixelFrame", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            RectTransform rootRect = root.GetComponent<RectTransform>();
+            rootRect.sizeDelta = new Vector2(620f, 350f);
+            ConfigureSlicedImage(root.GetComponent<Image>(), frameSprite, Color.white);
+
+            RectTransform content = CreateUiImage(
+                "Content Backdrop", rootRect, panelSprite, new Color(0.16f, 0.28f, 0.34f, 0.97f));
+            content.anchorMin = Vector2.zero;
+            content.anchorMax = Vector2.one;
+            content.offsetMin = new Vector2(12f, 12f);
+            content.offsetMax = new Vector2(-12f, -58f);
+
+            RectTransform title = CreateUiImage(
+                "Title Band", rootRect, titleSprite, new Color(0.20f, 0.52f, 0.64f, 1f));
+            title.anchorMin = new Vector2(0f, 1f);
+            title.anchorMax = Vector2.one;
+            title.pivot = new Vector2(0.5f, 1f);
+            title.anchoredPosition = new Vector2(0f, -10f);
+            title.sizeDelta = new Vector2(-20f, 48f);
+
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(
+                root, $"{UiPrefabFolder}/P_IdleTogetherPixelFrame.prefab");
+            Object.DestroyImmediate(root);
+            return prefab;
+        }
+
         private static void CreateScene(
             Materials materials,
             GameObject[] fishPrefabs,
             GameObject pipePrefab,
             GameObject[] shortPipePrefabs,
             GameObject seaGrassPrefab,
-            GameObject bubblePrefab)
+            GameObject bubblePrefab,
+            GameObject uiFramePrefab)
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             ApplyRenderSettings();
@@ -371,7 +420,7 @@ namespace FlappyBoids.Editor
             BuildDecorations(environment, seaGrassPrefab, bubblePrefab, shortPipePrefabs, scene);
             GateWall[] gates = BuildGates(environment, pipePrefab, scene);
             BuildFinish(environment, materials);
-            FlappyBoidsHud hud = BuildHud(gameRoot.transform, camera);
+            FlappyBoidsHud hud = BuildHud(gameRoot.transform, camera, uiFramePrefab);
 
             game.ConfigureScene(swarm, followCamera, audio, hud, gates);
             EditorUtility.SetDirty(game);
@@ -486,7 +535,8 @@ namespace FlappyBoids.Editor
                 new Vector3(0f, 8f, z), new Vector3(13.4f, 0.4f, 0.4f), materials.FishGold, false);
         }
 
-        private static FlappyBoidsHud BuildHud(Transform gameRoot, Camera camera)
+        private static FlappyBoidsHud BuildHud(
+            Transform gameRoot, Camera camera, GameObject uiFramePrefab)
         {
             Transform uiRoot = Group("05_UI", gameRoot);
             var canvasObject = new GameObject("Gameplay HUD Canvas", typeof(RectTransform));
@@ -503,7 +553,9 @@ namespace FlappyBoids.Editor
             canvasObject.AddComponent<GraphicRaycaster>();
             FlappyBoidsHud hud = canvasObject.AddComponent<FlappyBoidsHud>();
 
-            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            Font font = LoadRequiredAsset<Font>(IdleBodyFontPath);
+            Font headingFont = LoadRequiredAsset<Font>(IdleHeadingFontPath);
+            Sprite panelSprite = LoadRequiredAsset<Sprite>(IdlePanelSpritePath);
             Color panelColor = new Color(0.018f, 0.045f, 0.085f, 0.90f);
             Color cyan = new Color(0.48f, 0.92f, 1f, 1f);
             Color body = new Color(0.85f, 0.92f, 1f, 1f);
@@ -511,7 +563,7 @@ namespace FlappyBoids.Editor
 
             RectTransform schoolPanel = CreateUiPanel(
                 "School Counter", canvasObject.transform, new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(137f, -63f), new Vector2(230f, 82f), panelColor);
+                new Vector2(137f, -63f), new Vector2(230f, 82f), panelColor, panelSprite);
             CreateUiText("Label", schoolPanel, "SCHOOL REMAINING", font, 14, cyan,
                 TextAnchor.MiddleCenter, new Vector2(0f, 20f), new Vector2(210f, 24f), FontStyle.Bold);
             Text schoolCount = CreateUiText("Value", schoolPanel, $"{BoidSwarm.StartingBoids:00} / {BoidSwarm.StartingBoids}",
@@ -519,7 +571,7 @@ namespace FlappyBoids.Editor
 
             RectTransform pipesPanel = CreateUiPanel(
                 "Pipe Counter", canvasObject.transform, new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-137f, -63f), new Vector2(230f, 82f), panelColor);
+                new Vector2(-137f, -63f), new Vector2(230f, 82f), panelColor, panelSprite);
             CreateUiText("Label", pipesPanel, "PIPES CLEARED", font, 14, cyan,
                 TextAnchor.MiddleCenter, new Vector2(0f, 20f), new Vector2(210f, 24f), FontStyle.Bold);
             Text pipeCount = CreateUiText("Value", pipesPanel, $"00 / {FlappyBoidsGame.TotalGates}",
@@ -527,7 +579,7 @@ namespace FlappyBoids.Editor
 
             RectTransform routePanel = CreateUiPanel(
                 "Route Guidance", canvasObject.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0f, -54f), new Vector2(390f, 68f), panelColor);
+                new Vector2(0f, -54f), new Vector2(390f, 68f), panelColor, panelSprite);
             Text routeStatus = CreateUiText("Next Pipe + Flock Fit", routePanel,
                 "NEXT PIPE  23m    FLOCK FIT  100%", font, 14, cyan,
                 TextAnchor.MiddleCenter, new Vector2(0f, 17f), new Vector2(370f, 24f), FontStyle.Bold);
@@ -543,10 +595,10 @@ namespace FlappyBoids.Editor
             fitFill.fillOrigin = 0;
             fitFill.fillAmount = 1f;
 
-            RectTransform readyPanel = CreateUiPanel(
-                "Ready Panel", canvasObject.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                Vector2.zero, new Vector2(620f, 310f), new Color(0.012f, 0.040f, 0.075f, 0.94f));
-            CreateUiText("Title", readyPanel, "FLAPPY BOIDS: DEEP RUN", font, 44,
+            RectTransform readyPanel = InstantiateUiFrame(
+                uiFramePrefab, canvasObject.transform, "Ready Panel - IdleTogether Pixel Frame",
+                new Vector2(620f, 310f));
+            CreateUiText("Title", readyPanel, "FLAPPY BOIDS: DEEP RUN", headingFont, 44,
                 new Color(0.20f, 0.95f, 0.92f), TextAnchor.MiddleCenter,
                 new Vector2(0f, 96f), new Vector2(570f, 64f), FontStyle.Bold);
             CreateUiText("Brief", readyPanel,
@@ -558,10 +610,10 @@ namespace FlappyBoids.Editor
             CreateUiText("Launch", readyPanel, "PRESS SPACE TO LAUNCH", font, 15, cyan,
                 TextAnchor.MiddleCenter, new Vector2(0f, -104f), new Vector2(420f, 30f), FontStyle.Bold);
 
-            RectTransform resultPanel = CreateUiPanel(
-                "Result Panel", canvasObject.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                Vector2.zero, new Vector2(620f, 350f), new Color(0.012f, 0.040f, 0.075f, 0.95f));
-            Text resultTitle = CreateUiText("Title", resultPanel, "SCHOOL MADE IT!", font, 44,
+            RectTransform resultPanel = InstantiateUiFrame(
+                uiFramePrefab, canvasObject.transform, "Result Panel - IdleTogether Pixel Frame",
+                new Vector2(620f, 350f));
+            Text resultTitle = CreateUiText("Title", resultPanel, "SCHOOL MADE IT!", headingFont, 44,
                 new Color(0.20f, 0.95f, 0.92f), TextAnchor.MiddleCenter,
                 new Vector2(0f, 112f), new Vector2(570f, 60f), FontStyle.Bold);
             Text resultStats = CreateUiText("Run Stats", resultPanel, "PIPES  00     FINAL FISH  00", font, 20,
@@ -587,7 +639,8 @@ namespace FlappyBoids.Editor
             Vector2 anchorMax,
             Vector2 anchoredPosition,
             Vector2 size,
-            Color color)
+            Color color,
+            Sprite sprite = null)
         {
             var gameObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             RectTransform rect = gameObject.GetComponent<RectTransform>();
@@ -600,7 +653,45 @@ namespace FlappyBoids.Editor
             Image image = gameObject.GetComponent<Image>();
             image.color = color;
             image.raycastTarget = false;
+            if (sprite != null)
+            {
+                image.sprite = sprite;
+                image.type = Image.Type.Sliced;
+                image.pixelsPerUnitMultiplier = 3f;
+            }
             return rect;
+        }
+
+        private static RectTransform InstantiateUiFrame(
+            GameObject prefab, Transform parent, string name, Vector2 size)
+        {
+            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+            instance.name = name;
+            RectTransform rect = instance.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = size;
+            return rect;
+        }
+
+        private static RectTransform CreateUiImage(
+            string name, Transform parent, Sprite sprite, Color color)
+        {
+            var gameObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            RectTransform rect = gameObject.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            ConfigureSlicedImage(gameObject.GetComponent<Image>(), sprite, color);
+            return rect;
+        }
+
+        private static void ConfigureSlicedImage(Image image, Sprite sprite, Color color)
+        {
+            image.sprite = sprite;
+            image.type = Image.Type.Sliced;
+            image.pixelsPerUnitMultiplier = 3f;
+            image.color = color;
+            image.raycastTarget = false;
         }
 
         private static Text CreateUiText(
