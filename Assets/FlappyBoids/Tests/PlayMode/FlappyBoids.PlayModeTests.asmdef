@@ -1,0 +1,13 @@
+{
+  "name": "FlappyBoids.PlayModeTests",
+  "rootNamespace": "FlappyBoids.Tests",
+  "references": [
+    "FlappyBoids.Runtime",
+    "Unity.Entities",
+    "Unity.Collections"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false
+}

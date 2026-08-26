@@ -1,0 +1,14 @@
+{
+  "name": "FlappyBoids.Runtime",
+  "rootNamespace": "FlappyBoids",
+  "references": [
+    "Unity.InputSystem",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "Unity.Transforms",
+    "Unity.UGUI"
+  ],
+  "autoReferenced": true
+}

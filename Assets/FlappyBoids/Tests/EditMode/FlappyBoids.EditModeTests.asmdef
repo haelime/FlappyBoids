@@ -1,0 +1,15 @@
+{
+  "name": "FlappyBoids.EditModeTests",
+  "rootNamespace": "FlappyBoids.Tests",
+  "references": [
+    "FlappyBoids.Runtime",
+    "Unity.Mathematics"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": false
+}

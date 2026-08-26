@@ -1,0 +1,12 @@
+{
+  "name": "FlappyBoids.Editor",
+  "rootNamespace": "FlappyBoids.Editor",
+  "references": [
+    "FlappyBoids.Runtime",
+    "Unity.UGUI"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true
+}
