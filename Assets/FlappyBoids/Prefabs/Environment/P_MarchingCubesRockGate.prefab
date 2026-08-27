@@ -151,8 +151,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 688786e5924e48a59f5e7104f9ba208d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FlappyBoids.Runtime::FlappyBoids.MarchingCubesGateVisual
-  _rockMaterial: {fileID: 2100000, guid: f6c26cd316d7642479370ea8ab1601c2, type: 2}
+  _rockMaterial: {fileID: 2100000, guid: a0d89a53bbc6ffd4e9d52fbb87c1976e, type: 2}
   _lipMaterial: {fileID: 2100000, guid: 6e83d22d5a2c3cc429139fec7581aed8, type: 2}
+  _seed: 917
+  _roughness: 0.92
+  _ridgeStrength: 0.58
+  _chipStrength: 0.28
+  _crossSectionCells: 34
+  _depthCells: 8
+  _faceted: 1
 --- !u!33 &2203459826764785716
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -186,7 +193,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: f6c26cd316d7642479370ea8ab1601c2, type: 2}
+  - {fileID: 2100000, guid: a0d89a53bbc6ffd4e9d52fbb87c1976e, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

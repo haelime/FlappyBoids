@@ -76,6 +76,44 @@ namespace FlappyBoids.Tests
         }
 
         [Test]
+        public void MarchingCubes_FacetedConversionGivesEveryTriangleHardEdges()
+        {
+            Mesh mesh = MarchingCubesMeshBuilder.Build(
+                "Faceted Test Sphere",
+                new Bounds(Vector3.zero, Vector3.one * 4f),
+                new Vector3Int(8, 8, 8),
+                point => 1f - point.magnitude);
+            int triangleIndexCount = mesh.triangles.Length;
+
+            try
+            {
+                MarchingCubesMeshBuilder.MakeFaceted(mesh);
+
+                Assert.That(mesh.vertexCount, Is.EqualTo(triangleIndexCount));
+                Assert.That(mesh.triangles.Length, Is.EqualTo(triangleIndexCount));
+            }
+            finally
+            {
+                Object.DestroyImmediate(mesh);
+            }
+        }
+
+        [Test]
+        public void RuggedRockNoise_IsDeterministicBoundedAndSeeded()
+        {
+            var point = new Vector2(3.25f, 18.75f);
+            float first = RuggedRockNoise.Mass(point, 917, 0.16f);
+            float repeat = RuggedRockNoise.Mass(point, 917, 0.16f);
+            float otherSeed = RuggedRockNoise.Mass(point, 1337, 0.16f);
+
+            Assert.That(first, Is.InRange(0f, 1f));
+            Assert.That(repeat, Is.EqualTo(first).Within(0.000001f));
+            Assert.That(Mathf.Abs(otherSeed - first), Is.GreaterThan(0.0001f));
+            Assert.That(RuggedRockNoise.Ridge(point, 917, 0.43f), Is.InRange(0f, 1f));
+            Assert.That(RuggedRockNoise.Chips(point, 917, 0.91f), Is.InRange(0f, 1f));
+        }
+
+        [Test]
         public void GateHole_AllowsBoidWhollyInside()
         {
             bool hit = GateWall.IntersectsWall(

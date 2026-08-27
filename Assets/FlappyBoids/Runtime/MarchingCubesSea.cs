@@ -127,6 +127,27 @@ namespace FlappyBoids
             return mesh;
         }
 
+        public static void MakeFaceted(Mesh mesh)
+        {
+            if (mesh == null) throw new ArgumentNullException(nameof(mesh));
+            int[] sourceTriangles = mesh.triangles;
+            Vector3[] sourceVertices = mesh.vertices;
+            var facetedVertices = new Vector3[sourceTriangles.Length];
+            var facetedTriangles = new int[sourceTriangles.Length];
+            for (int i = 0; i < sourceTriangles.Length; i++)
+            {
+                facetedVertices[i] = sourceVertices[sourceTriangles[i]];
+                facetedTriangles[i] = i;
+            }
+
+            mesh.Clear();
+            mesh.indexFormat = IndexFormat.UInt32;
+            mesh.vertices = facetedVertices;
+            mesh.triangles = facetedTriangles;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+        }
+
         private static void FillCorners(
             Vector3 origin,
             Vector3 step,

@@ -154,9 +154,9 @@ namespace FlappyBoids.Editor
         {
             return new Materials
             {
-                Pipe = CreateMaterial("M_Pipe_Aged", new Color(0.025f, 0.08f, 0.07f), 0.20f, false, true),
                 PipeAccent = CreateMaterial("M_Pipe_SafetyRing", new Color(0.85f, 0.20f, 0.03f), 0.06f, false, true),
-                Seabed = CreateMaterial("M_Seabed", new Color(0.26f, 0.25f, 0.18f), 0.08f),
+                Rock = CreateMaterial("M_Rock_Basalt", new Color(0.105f, 0.125f, 0.115f), 0.025f),
+                Seabed = CreateMaterial("M_Seabed", new Color(0.16f, 0.17f, 0.135f), 0.035f),
                 WaterSurface = LoadRequiredAsset<Material>(WaterMaterialPath),
                 Guide = CreateMaterial("M_Guide_Bioluminescent", new Color(0.29f, 0.68f, 0.42f), 0.22f, true),
                 FishBlue = CreateMaterial("M_Fish_Blue", new Color(0.20f, 0.58f, 0.82f), 0.34f),
@@ -241,7 +241,7 @@ namespace FlappyBoids.Editor
             var root = new GameObject("P_MarchingCubesRockGate");
             GateWall gate = root.AddComponent<GateWall>();
             MarchingCubesGateVisual visual = root.AddComponent<MarchingCubesGateVisual>();
-            visual.Configure(materials.Pipe, materials.PipeAccent);
+            visual.Configure(materials.Rock, materials.PipeAccent);
             gate.SetHoleDiameter(6.1f);
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root,
                 $"{EnvironmentPrefabFolder}/P_MarchingCubesRockGate.prefab");
@@ -702,8 +702,8 @@ namespace FlappyBoids.Editor
 
         private sealed class Materials
         {
-            public Material Pipe;
             public Material PipeAccent;
+            public Material Rock;
             public Material Seabed;
             public Material WaterSurface;
             public Material Guide;
