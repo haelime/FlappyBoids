@@ -31,7 +31,7 @@ namespace FlappyBoids.Tests
         }
 
         [Test]
-        public void AuthoredScene_ContainsAllSevenImportedBubbleZones()
+        public void AuthoredScene_ContainsOnlyCameraBubbleZone()
         {
             string sceneYaml = File.ReadAllText(AuthoredScenePath);
             string bubbleGuid = AssetDatabase.AssetPathToGUID(BubblePrefabPath);
@@ -40,7 +40,39 @@ namespace FlappyBoids.Tests
             Assert.That(Regex.Matches(
                 sceneYaml,
                 $@"m_SourcePrefab: \{{fileID: 100100000, guid: {bubbleGuid}, type: 3\}}").Count,
-                Is.EqualTo(7));
+                Is.EqualTo(1));
+        }
+
+        [Test]
+        public void AuthoredScene_UsesMarchingCubesWithoutLegacyDecorations()
+        {
+            string sceneYaml = File.ReadAllText(AuthoredScenePath);
+
+            Assert.That(sceneYaml, Does.Contain("01_Marching Cubes Infinite Sea"));
+            Assert.That(sceneYaml, Does.Contain("02_Marching Cubes Rock Gates"));
+            Assert.That(sceneYaml, Does.Not.Contain("01_Corridor"));
+            Assert.That(sceneYaml, Does.Not.Contain("03_Decorations"));
+        }
+
+        [Test]
+        public void MarchingCubes_ExtractsClosedSphereSurface()
+        {
+            Mesh mesh = MarchingCubesMeshBuilder.Build(
+                "Test Sphere",
+                new Bounds(Vector3.zero, Vector3.one * 4f),
+                new Vector3Int(12, 12, 12),
+                point => 1f - point.magnitude);
+
+            try
+            {
+                Assert.That(mesh.vertexCount, Is.GreaterThan(100));
+                Assert.That(mesh.triangles.Length, Is.GreaterThan(300));
+                Assert.That(mesh.bounds.extents.x, Is.EqualTo(1f).Within(0.12f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(mesh);
+            }
         }
 
         [Test]

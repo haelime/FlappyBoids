@@ -19,10 +19,6 @@ namespace FlappyBoids.Editor
         private const string UiPrefabFolder = Root + "/Prefabs/UI";
         private const string SceneFolder = Root + "/Scenes";
         private const string ScenePath = SceneFolder + "/FlappyBoids.unity";
-        private const string StraightPipeModelPath =
-            Root + "/ThirdParty/ModularLowPolyPipes/Models/Pipe2-1.obj";
-        private const string CornerPipeModelPath =
-            Root + "/ThirdParty/ModularLowPolyPipes/Models/Pipe2-2.obj";
         private const string WaterMaterialPath =
             Root + "/ThirdParty/UberStylizedWater/Template Materials/UWa-Template-Murky.mat";
         private const string BubblePrefabPath =
@@ -37,7 +33,7 @@ namespace FlappyBoids.Editor
             Root + "/Imported/IdleTogetherUI/Textures/FrameBlueDoubleBorder.png";
         private const string IdlePanelSpritePath =
             Root + "/Imported/IdleTogetherUI/Textures/PanelGrayRelief.png";
-        private const string ExternalAssetSceneMarker = "Ready Panel - Infinite Course v3";
+        private const string ExternalAssetSceneMarker = "01_Marching Cubes Infinite Sea";
 
         [InitializeOnLoadMethod]
         private static void QueueExternalAssetSceneUpgrade()
@@ -79,18 +75,11 @@ namespace FlappyBoids.Editor
                 CreateFishPrefab("P_Fish_Gold", materials.FishGold, materials),
                 CreateFishPrefab("P_Fish_Coral", materials.FishCoral, materials)
             };
-            GameObject pipePrefab = CreatePipePrefab(materials);
-            GameObject[] shortPipePrefabs =
-            {
-                CreateImportedPipePrefab("P_ShortPipe_Straight_CC0", StraightPipeModelPath, materials.Pipe),
-                CreateImportedPipePrefab("P_ShortPipe_Corner_CC0", CornerPipeModelPath, materials.Pipe)
-            };
-            GameObject seaGrassPrefab = CreateSeaGrassPrefab(materials);
+            GameObject gatePrefab = CreateMarchingCubesGatePrefab(materials);
             GameObject uiFramePrefab = CreateIdleTogetherUiFramePrefab();
             GameObject bubblePrefab = LoadRequiredAsset<GameObject>(BubblePrefabPath);
-            CreateScene(
-                materials, fishPrefabs, pipePrefab, shortPipePrefabs,
-                seaGrassPrefab, bubblePrefab, uiFramePrefab);
+            CreateScene(materials, fishPrefabs, gatePrefab, bubblePrefab, uiFramePrefab);
+            DeleteLegacyEnvironmentPrefabs();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             ValidateScenePrefabReferences();
@@ -122,9 +111,22 @@ namespace FlappyBoids.Editor
             int bubbleInstances = Regex.Matches(
                 sceneYaml,
                 $@"m_SourcePrefab: \{{fileID: 100100000, guid: {bubbleGuid}, type: 3\}}").Count;
-            if (bubbleInstances != 7)
+            if (bubbleInstances != 1)
                 throw new InvalidDataException(
-                    $"Expected 7 imported bubble prefab instances, but found {bubbleInstances} in {ScenePath}.");
+                    $"Expected only the camera bubble prefab instance, but found {bubbleInstances} in {ScenePath}.");
+        }
+
+        private static void DeleteLegacyEnvironmentPrefabs()
+        {
+            string[] legacyAssets =
+            {
+                EnvironmentPrefabFolder + "/P_CircularPipeGate.prefab",
+                EnvironmentPrefabFolder + "/P_SeaGrass.prefab",
+                EnvironmentPrefabFolder + "/P_ShortPipe_Straight_CC0.prefab",
+                EnvironmentPrefabFolder + "/P_ShortPipe_Corner_CC0.prefab"
+            };
+            foreach (string asset in legacyAssets)
+                if (AssetDatabase.LoadMainAssetAtPath(asset) != null) AssetDatabase.DeleteAsset(asset);
         }
 
         private static void EnsureFolders()
@@ -234,91 +236,15 @@ namespace FlappyBoids.Editor
             return prefab;
         }
 
-        private static GameObject CreatePipePrefab(Materials materials)
+        private static GameObject CreateMarchingCubesGatePrefab(Materials materials)
         {
-            var root = new GameObject("P_CircularPipeGate");
+            var root = new GameObject("P_MarchingCubesRockGate");
             GateWall gate = root.AddComponent<GateWall>();
+            MarchingCubesGateVisual visual = root.AddComponent<MarchingCubesGateVisual>();
+            visual.Configure(materials.Pipe, materials.PipeAccent);
             gate.SetHoleDiameter(6.1f);
-
-            const float outerHalfWidth = 13f;
-            const float outerHalfHeight = 9f;
-            const float radius = 3.05f;
-            const int rows = 20;
-            float rowHeight = outerHalfHeight * 2f / rows;
-            for (int row = 0; row < rows; row++)
-            {
-                float y = -outerHalfHeight + (row + 0.5f) * rowHeight;
-                float openingHalf = Mathf.Abs(y) < radius
-                    ? Mathf.Sqrt(radius * radius - y * y)
-                    : 0f;
-                if (openingHalf <= 0.01f)
-                {
-                    CreatePart(PrimitiveType.Cube, $"Wall Row {row:00}", root.transform,
-                        new Vector3(0f, y, 0f), new Vector3(outerHalfWidth * 2f, rowHeight + 0.02f, GateWall.Thickness), materials.Pipe);
-                    continue;
-                }
-
-                float sideWidth = outerHalfWidth - openingHalf;
-                CreatePart(PrimitiveType.Cube, $"Wall Left {row:00}", root.transform,
-                    new Vector3(-(openingHalf + sideWidth * 0.5f), y, 0f),
-                    new Vector3(sideWidth, rowHeight + 0.02f, GateWall.Thickness), materials.Pipe);
-                CreatePart(PrimitiveType.Cube, $"Wall Right {row:00}", root.transform,
-                    new Vector3(openingHalf + sideWidth * 0.5f, y, 0f),
-                    new Vector3(sideWidth, rowHeight + 0.02f, GateWall.Thickness), materials.Pipe);
-            }
-
-            const int segments = 28;
-            float segmentLength = 2f * Mathf.PI * radius / segments * 1.12f;
-            for (int segment = 0; segment < segments; segment++)
-            {
-                float angle = segment * Mathf.PI * 2f / segments;
-                Transform rim = CreatePart(PrimitiveType.Cube, $"Safety Ring {segment:00}", root.transform,
-                    new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, -GateWall.Thickness * 0.57f),
-                    new Vector3(segmentLength, 0.18f, GateWall.Thickness + 0.18f), materials.PipeAccent, false).transform;
-                rim.localRotation = Quaternion.Euler(0f, 0f, angle * Mathf.Rad2Deg + 90f);
-            }
-
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root,
-                $"{EnvironmentPrefabFolder}/P_CircularPipeGate.prefab");
-            Object.DestroyImmediate(root);
-            return prefab;
-        }
-
-        private static GameObject CreateImportedPipePrefab(string prefabName, string modelPath, Material material)
-        {
-            AssetDatabase.ImportAsset(modelPath, ImportAssetOptions.ForceSynchronousImport);
-            GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
-            if (model == null)
-                throw new System.InvalidOperationException($"CC0 pipe model could not be imported: {modelPath}");
-
-            var root = new GameObject(prefabName);
-            GameObject visual = (GameObject)PrefabUtility.InstantiatePrefab(model);
-            visual.name = "CC0 Pipe Mesh";
-            visual.transform.SetParent(root.transform, false);
-            visual.transform.localScale = Vector3.one * 0.28f;
-            foreach (Renderer renderer in visual.GetComponentsInChildren<Renderer>(true))
-            {
-                renderer.sharedMaterial = material;
-                renderer.shadowCastingMode = ShadowCastingMode.On;
-                renderer.receiveShadows = true;
-            }
-
-            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root,
-                $"{EnvironmentPrefabFolder}/{prefabName}.prefab");
-            Object.DestroyImmediate(root);
-            return prefab;
-        }
-
-        private static GameObject CreateSeaGrassPrefab(Materials materials)
-        {
-            var root = new GameObject("P_SeaGrass");
-            Transform stem = CreatePart(PrimitiveType.Cylinder, "Stem", root.transform,
-                new Vector3(0f, 0.65f, 0f), new Vector3(0.10f, 0.65f, 0.10f), materials.Pipe, false).transform;
-            stem.localRotation = Quaternion.Euler(0f, 0f, -7f);
-            CreatePart(PrimitiveType.Sphere, "Glow Tip", root.transform,
-                new Vector3(0.15f, 1.35f, 0f), Vector3.one * 0.13f, materials.Guide, false);
-            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root,
-                $"{EnvironmentPrefabFolder}/P_SeaGrass.prefab");
+                $"{EnvironmentPrefabFolder}/P_MarchingCubesRockGate.prefab");
             Object.DestroyImmediate(root);
             return prefab;
         }
@@ -359,12 +285,16 @@ namespace FlappyBoids.Editor
         private static void CreateScene(
             Materials materials,
             GameObject[] fishPrefabs,
-            GameObject pipePrefab,
-            GameObject[] shortPipePrefabs,
-            GameObject seaGrassPrefab,
+            GameObject gatePrefab,
             GameObject bubblePrefab,
             GameObject uiFramePrefab)
         {
+            if (File.Exists(ScenePath))
+            {
+                UpdateExistingSceneEnvironment(materials, gatePrefab);
+                return;
+            }
+
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             ApplyRenderSettings();
 
@@ -434,12 +364,8 @@ namespace FlappyBoids.Editor
             RenderSettings.sun = sun;
 
             Transform environment = Group("04_Environment", gameRoot.transform);
-            Transform infiniteScenery = Group("01_Infinite Scenery", environment);
-            infiniteScenery.gameObject.AddComponent<InfiniteCorridorScroller>();
-            BuildCorridor(infiniteScenery, materials);
-            BuildGuides(infiniteScenery, materials);
-            BuildDecorations(infiniteScenery, seaGrassPrefab, bubblePrefab, shortPipePrefabs, scene);
-            GateWall[] gates = BuildGates(environment, pipePrefab, scene);
+            BuildMarchingCubesSea(environment, materials);
+            GateWall[] gates = BuildGates(environment, gatePrefab, scene);
             FlappyBoidsHud hud = BuildHud(gameRoot.transform, camera, uiFramePrefab);
 
             game.ConfigureScene(swarm, followCamera, audio, hud, gates);
@@ -450,86 +376,75 @@ namespace FlappyBoids.Editor
             Selection.activeGameObject = gameRoot;
         }
 
-        private static void BuildCorridor(Transform environment, Materials materials)
+        private static void UpdateExistingSceneEnvironment(Materials materials, GameObject gatePrefab)
         {
-            Transform corridor = Group("01_Corridor", environment);
-            CreatePart(PrimitiveType.Cube, "Seabed", corridor, new Vector3(0f, -0.24f, 117f),
-                new Vector3(19f, 0.48f, 280f), materials.Seabed);
-            GameObject waterSurface = CreatePart(PrimitiveType.Plane, "Uber Water Surface (MIT Asset)", corridor,
-                new Vector3(0f, GateWall.CorridorHeight + 18f, 117f),
-                new Vector3(1.9f, 1f, 28f), materials.WaterSurface, false);
-            waterSurface.transform.localRotation = Quaternion.identity;
-            CreatePart(PrimitiveType.Cube, "Left Tunnel Edge", corridor,
-                new Vector3(-GateWall.CorridorHalfWidth - 0.2f, GateWall.CorridorHeight * 0.5f, 117f),
-                new Vector3(0.4f, GateWall.CorridorHeight, 280f), materials.Seabed);
-            CreatePart(PrimitiveType.Cube, "Right Tunnel Edge", corridor,
-                new Vector3(GateWall.CorridorHalfWidth + 0.2f, GateWall.CorridorHeight * 0.5f, 117f),
-                new Vector3(0.4f, GateWall.CorridorHeight, 280f), materials.Seabed);
+            Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            FlappyBoidsGame game = Object.FindAnyObjectByType<FlappyBoidsGame>(FindObjectsInactive.Include);
+            if (game == null)
+                throw new InvalidDataException(
+                    $"The existing scene has no FlappyBoidsGame root and cannot be upgraded safely: {ScenePath}");
+
+            Transform existingEnvironment = game.transform.Find("04_Environment");
+            if (existingEnvironment != null) Object.DestroyImmediate(existingEnvironment.gameObject);
+
+            Transform environment = Group("04_Environment", game.transform);
+            BuildMarchingCubesSea(environment, materials);
+            GateWall[] gates = BuildGates(environment, gatePrefab, scene);
+
+            BoidSwarm swarm = game.GetComponentInChildren<BoidSwarm>(true);
+            FlappyBoidsCamera followCamera = game.GetComponentInChildren<FlappyBoidsCamera>(true);
+            FlappyBoidsAudio audio = game.GetComponentInChildren<FlappyBoidsAudio>(true);
+            FlappyBoidsHud hud = game.GetComponentInChildren<FlappyBoidsHud>(true);
+            if (swarm == null || followCamera == null || audio == null || hud == null)
+                throw new InvalidDataException(
+                    "The existing scene is missing a gameplay component. UI was left untouched; repair the scene references before rebuilding.");
+
+            game.ConfigureScene(swarm, followCamera, audio, hud, gates);
+            EditorUtility.SetDirty(game);
+            EditorUtility.SetDirty(swarm);
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            Selection.activeGameObject = game.gameObject;
         }
 
-        private static void BuildGuides(Transform environment, Materials materials)
+        private static void BuildMarchingCubesSea(Transform environment, Materials materials)
         {
-            Transform guides = Group("02_Bioluminescent Guides", environment);
-            int index = 0;
-            for (int z = -18; z <= 255; z += 9)
+            Transform root = Group("01_Marching Cubes Infinite Sea", environment);
+            InfiniteSeaTerrain terrain = root.gameObject.AddComponent<InfiniteSeaTerrain>();
+            const int chunkCount = 12;
+            var chunks = new MarchingCubesSeaChunk[chunkCount];
+            for (int i = 0; i < chunkCount; i++)
             {
-                Transform segment = Group($"Guide Segment {index++:00}", guides);
-                CreatePart(PrimitiveType.Cube, "Center", segment, new Vector3(0f, 0.015f, z),
-                    new Vector3(0.12f, 0.03f, 4.8f), materials.Guide, false);
-                CreatePart(PrimitiveType.Cube, "Left", segment, new Vector3(-6.3f, 0.02f, z),
-                    new Vector3(0.06f, 0.035f, 4.8f), materials.Guide, false);
-                CreatePart(PrimitiveType.Cube, "Right", segment, new Vector3(6.3f, 0.02f, z),
-                    new Vector3(0.06f, 0.035f, 4.8f), materials.Guide, false);
+                int chunkIndex = i - 1;
+                Transform chunkRoot = Group($"Sea Chunk {i + 1:00} [MC {chunkIndex}]", root);
+                MarchingCubesSeaChunk chunk = chunkRoot.gameObject.AddComponent<MarchingCubesSeaChunk>();
+                chunk.Configure(chunkIndex, materials.Seabed);
+                GameObject waterSurface = CreatePart(
+                    PrimitiveType.Plane,
+                    "Uber Water Surface (MIT Asset)",
+                    chunkRoot,
+                    new Vector3(0f, GateWall.CorridorHeight + 18f, 0f),
+                    new Vector3(2.5f, 1f, MarchingCubesSeaChunk.DefaultLength / 10f),
+                    materials.WaterSurface,
+                    false);
+                waterSurface.transform.localRotation = Quaternion.identity;
+                chunks[i] = chunk;
             }
+            terrain.Configure(chunks);
+            EditorUtility.SetDirty(terrain);
         }
 
-        private static void BuildDecorations(
-            Transform environment,
-            GameObject seaGrassPrefab,
-            GameObject bubblePrefab,
-            GameObject[] shortPipePrefabs,
-            Scene scene)
+        private static GateWall[] BuildGates(Transform environment, GameObject gatePrefab, Scene scene)
         {
-            Transform decorations = Group("03_Decorations (Prefab Instances)", environment);
-            int index = 0;
-            for (int z = -8; z <= 245; z += 12)
-            {
-                float sway = Mathf.Sin(z * 0.31f) * 0.7f;
-                GameObject left = InstantiatePrefab(seaGrassPrefab, decorations, scene, $"Sea Grass L {index:00}");
-                left.transform.position = new Vector3(-8.2f + sway, 0f, z);
-                GameObject right = InstantiatePrefab(seaGrassPrefab, decorations, scene, $"Sea Grass R {index:00}");
-                right.transform.position = new Vector3(8.2f - sway, 0f, z + 4f);
-                right.transform.localScale = new Vector3(0.82f, 0.82f, 0.82f);
-                if (index % 4 == 0)
-                {
-                    GameObject bubbles = InstantiatePrefab(bubblePrefab, decorations, scene, $"Bubble Column {index / 4 + 1:00}");
-                    bubbles.transform.position = new Vector3(index % 8 == 0 ? -7.3f : 7.3f, 0.05f, z + 6f);
-                    bubbles.transform.localScale = Vector3.one * 0.045f;
-                }
-                if (shortPipePrefabs != null && shortPipePrefabs.Length > 0 && index % 3 == 1)
-                {
-                    GameObject shortPipe = InstantiatePrefab(
-                        shortPipePrefabs[(index / 3) % shortPipePrefabs.Length], decorations, scene,
-                        $"CC0 Short Pipe {index / 3 + 1:00}");
-                    bool placeLeft = index % 2 == 0;
-                    shortPipe.transform.position = new Vector3(placeLeft ? -8.75f : 8.75f, 1.15f, z + 2f);
-                    shortPipe.transform.rotation = Quaternion.Euler(
-                        placeLeft ? 0f : 180f, 0f, placeLeft ? 12f : -12f);
-                }
-                index++;
-            }
-        }
-
-        private static GateWall[] BuildGates(Transform environment, GameObject pipePrefab, Scene scene)
-        {
-            Transform root = Group("04_Pipe Gates (Prefab Instances)", environment);
+            Transform root = Group("02_Marching Cubes Rock Gates (Prefab Instances)", environment);
             var gates = new List<GateWall>(FlappyBoidsGame.GatePoolSize);
             Vector2 previousCenter = new Vector2(0f, 5.5f);
             for (int i = 0; i < FlappyBoidsGame.GatePoolSize; i++)
             {
                 float z = 23f + i * FlappyBoidsGame.DefaultGateSpacing;
                 Vector2 center = FlappyBoidsGame.CalculateHoleCenter(i, previousCenter);
-                GameObject instance = InstantiatePrefab(pipePrefab, root, scene, $"Pipe Gate {i + 1:00}");
+                GameObject instance = InstantiatePrefab(gatePrefab, root, scene, $"Rock Gate {i + 1:00}");
                 instance.transform.position = new Vector3(center.x, center.y, z);
                 GateWall gate = instance.GetComponent<GateWall>();
                 gate.SetHoleDiameter(FlappyBoidsGame.CalculateHoleDiameter(i));

@@ -36,7 +36,7 @@ namespace FlappyBoids
 
         private readonly List<GateWall> _gates = new List<GateWall>(GatePoolSize);
         private GateSnapshot[] _initialGateStates = Array.Empty<GateSnapshot>();
-        private InfiniteCorridorScroller _corridorScroller;
+        private InfiniteSeaTerrain _seaTerrain;
         private int _nextGateSequence;
         private bool _built;
 
@@ -108,7 +108,7 @@ namespace FlappyBoids
             if (_followCamera == null) _followCamera = GetComponentInChildren<FlappyBoidsCamera>(true);
             if (_audio == null) _audio = GetComponentInChildren<FlappyBoidsAudio>(true);
             if (_hud == null) _hud = GetComponentInChildren<FlappyBoidsHud>(true);
-            if (_corridorScroller == null) _corridorScroller = GetComponentInChildren<InfiniteCorridorScroller>(true);
+            if (_seaTerrain == null) _seaTerrain = GetComponentInChildren<InfiniteSeaTerrain>(true);
 
             _gates.Clear();
             if (_authoredGates == null || _authoredGates.Length == 0)
@@ -182,7 +182,7 @@ namespace FlappyBoids
         private void RestartAndLaunch()
         {
             RestoreInitialGatePool();
-            if (_corridorScroller != null) _corridorScroller.ResetPosition();
+            if (_seaTerrain != null) _seaTerrain.ResetTerrain();
             WallsPassed = 0;
             Won = false;
             NewBest = false;
@@ -362,39 +362,4 @@ namespace FlappyBoids
         }
     }
 
-    [DefaultExecutionOrder(150)]
-    [DisallowMultipleComponent]
-    public sealed class InfiniteCorridorScroller : MonoBehaviour
-    {
-        [SerializeField, Min(40f)] private float _segmentLength = 280f;
-        [SerializeField, Min(20f)] private float _advanceDistance = 160f;
-        [SerializeField, Min(5f)] private float _rearSafetyMargin = 50f;
-        [SerializeField] private float _segmentCenterLocalZ = 117f;
-
-        private BoidSwarm _swarm;
-        private Vector3 _initialPosition;
-
-        private void Awake()
-        {
-            _initialPosition = transform.position;
-            _swarm = GetComponentInParent<BoidSwarm>();
-            if (_swarm == null) _swarm = FindAnyObjectByType<BoidSwarm>();
-        }
-
-        private void LateUpdate()
-        {
-            if (_swarm == null || _swarm.AliveCount <= 0) return;
-            float segmentEnd = transform.position.z + _segmentCenterLocalZ + _segmentLength * 0.5f;
-            while (_swarm.Center.z > segmentEnd - _rearSafetyMargin)
-            {
-                transform.position += Vector3.forward * _advanceDistance;
-                segmentEnd += _advanceDistance;
-            }
-        }
-
-        public void ResetPosition()
-        {
-            transform.position = _initialPosition;
-        }
-    }
 }

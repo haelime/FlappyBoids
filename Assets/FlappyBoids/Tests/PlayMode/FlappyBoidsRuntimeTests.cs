@@ -24,6 +24,9 @@ namespace FlappyBoids.Tests
             Assert.That(Object.FindObjectsByType<GateWall>().Length,
                 Is.EqualTo(FlappyBoidsGame.GatePoolSize),
                 "The infinite course should reuse a fixed-size gate pool.");
+            Assert.That(Object.FindAnyObjectByType<InfiniteSeaTerrain>(), Is.Not.Null,
+                "The old corridor must be replaced by the recyclable Marching Cubes sea terrain.");
+            Assert.That(Object.FindObjectsByType<MarchingCubesSeaChunk>().Length, Is.EqualTo(12));
             GateWall[] gates = Object.FindObjectsByType<GateWall>();
             float smallestOpening = float.MaxValue;
             float largestOpening = 0f;
