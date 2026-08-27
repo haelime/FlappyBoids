@@ -1,5 +1,6 @@
 using System.Collections;
 using NUnit.Framework;
+using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -10,7 +11,7 @@ namespace FlappyBoids.Tests
     public sealed class FlappyBoidsRuntimeTests
     {
         [UnityTest]
-        public IEnumerator RuntimeBootstrap_CreatesAndAdvancesDotsFlock()
+        public IEnumerator RuntimeBootstrap_KeepsDotsFlockNearItsStartWhileCourseAdvances()
         {
             SceneManager.LoadScene("FlappyBoids");
             yield return null;
@@ -52,11 +53,19 @@ namespace FlappyBoids.Tests
             Assert.That(query.CalculateEntityCount(), Is.EqualTo(BoidSwarm.StartingBoids));
 
             float startZ = game.Swarm.Center.z;
-            game.Swarm.Begin();
-            game.Swarm.SetInput(1f, true);
+            float firstGateStartZ = float.MaxValue;
+            for (int i = 0; i < gates.Length; i++)
+                firstGateStartZ = Mathf.Min(firstGateStartZ, gates[i].Z);
+            game.BeginRun(1f);
             for (int i = 0; i < 12; i++) yield return null;
 
-            Assert.That(game.Swarm.Center.z, Is.GreaterThan(startZ), "ECS flock should advance down the course.");
+            float firstGateCurrentZ = float.MaxValue;
+            for (int i = 0; i < gates.Length; i++)
+                firstGateCurrentZ = Mathf.Min(firstGateCurrentZ, gates[i].Z);
+            Assert.That(Mathf.Abs(game.Swarm.Center.z - startZ), Is.LessThan(0.5f),
+                "The flock must not be force-translated down the course.");
+            Assert.That(firstGateCurrentZ, Is.LessThan(firstGateStartZ),
+                "The pooled course must move toward the stationary flock.");
             Assert.That(query.CalculateEntityCount(), Is.EqualTo(BoidSwarm.StartingBoids),
                 "No boid should be lost before the first gate.");
             query.Dispose();
@@ -76,6 +85,13 @@ namespace FlappyBoids.Tests
             float initialFurthestZ = float.MinValue;
             for (int i = 0; i < initialGates.Length; i++)
                 initialFurthestZ = Mathf.Max(initialFurthestZ, initialGates[i].Z);
+
+            EntityManager entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
+            EntityQuery gateQuery = entityManager.CreateEntityQuery(ComponentType.ReadOnly<GateObstacle>());
+            NativeArray<Entity> initialObstacleEntities = gateQuery.ToEntityArray(Allocator.Temp);
+            Entity[] initialObstaclePool = initialObstacleEntities.ToArray();
+            initialObstacleEntities.Dispose();
+            float swarmStartZ = game.Swarm.Center.z;
 
             game.BeginRun();
             float elapsed = 0f;
@@ -98,7 +114,17 @@ namespace FlappyBoids.Tests
 
             Assert.That(game.WallsPassed, Is.GreaterThanOrEqualTo(1));
             Assert.That(recycledGates.Length, Is.EqualTo(FlappyBoidsGame.GatePoolSize));
-            Assert.That(recycledFurthestZ, Is.GreaterThan(initialFurthestZ));
+            CollectionAssert.AreEquivalent(initialGates, recycledGates,
+                "Gate recycling must reuse the authored pool without spawning replacements.");
+            NativeArray<Entity> recycledObstacleEntities = gateQuery.ToEntityArray(Allocator.Temp);
+            CollectionAssert.AreEquivalent(initialObstaclePool, recycledObstacleEntities.ToArray(),
+                "ECS gate obstacles must also be pooled instead of destroyed and recreated.");
+            recycledObstacleEntities.Dispose();
+            gateQuery.Dispose();
+            Assert.That(recycledFurthestZ, Is.LessThanOrEqualTo(initialFurthestZ + 0.5f),
+                "The course scroll should recycle a passed gate into a forward slot, not move the flock forward.");
+            Assert.That(Mathf.Abs(game.Swarm.Center.z - swarmStartZ), Is.LessThan(0.75f),
+                "Recycling a wall must not teleport or force-translate the flock.");
             Assert.That(game.Swarm.AliveCount, Is.GreaterThan(0));
 
             Object.Destroy(game.gameObject);

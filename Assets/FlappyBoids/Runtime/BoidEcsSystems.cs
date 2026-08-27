@@ -55,7 +55,7 @@ namespace FlappyBoids
                 OutputVelocities = nextVelocities,
                 Parameters = parameters,
                 Anchor = control.Anchor,
-                LeaderVelocity = new float3(control.HorizontalVelocity, control.VerticalVelocity, parameters.ForwardSpeed),
+                LeaderVelocity = new float3(control.HorizontalVelocity, control.VerticalVelocity, 0f),
                 Boosted = control.BoostTime > 0f,
                 DeltaTime = deltaTime
             };
@@ -106,7 +106,7 @@ namespace FlappyBoids
             control.Anchor += new float3(
                 control.HorizontalVelocity,
                 control.VerticalVelocity,
-                parameters.ForwardSpeed) * deltaTime;
+                0f) * deltaTime;
             control.Anchor.x = math.clamp(control.Anchor.x, -7.5f, 7.5f);
             control.Anchor.y = math.clamp(control.Anchor.y, 0.7f, parameters.CorridorHeight - 0.7f);
         }
@@ -179,7 +179,7 @@ namespace FlappyBoids
                 force = Limit(force, Parameters.MaxSteerForce);
 
                 float3 next = velocity + force * DeltaTime;
-                next.z = MoveTowards(next.z, Parameters.ForwardSpeed, 5.5f * DeltaTime);
+                next.z = MoveTowards(next.z, 0f, 5.5f * DeltaTime);
                 OutputVelocities[index] = Limit(next, Parameters.MaxSpeed);
             }
 
@@ -204,6 +204,32 @@ namespace FlappyBoids
                 float length = math.length(value);
                 return length > maximum && length > 0f ? value * (maximum / length) : value;
             }
+        }
+    }
+
+    [BurstCompile]
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateAfter(typeof(BoidFlockingSystem))]
+    [UpdateBefore(typeof(BoidWallCollisionSystem))]
+    public partial struct GateCourseScrollSystem : ISystem
+    {
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<FlockControl>();
+            state.RequireForUpdate<FlockParameters>();
+            state.RequireForUpdate<GateObstacle>();
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            FlockControl control = SystemAPI.GetSingleton<FlockControl>();
+            if (control.Running == 0) return;
+
+            float distance = SystemAPI.GetSingleton<FlockParameters>().CourseSpeed * SystemAPI.Time.DeltaTime;
+            foreach (RefRW<GateObstacle> gate in SystemAPI.Query<RefRW<GateObstacle>>())
+                gate.ValueRW.Z -= distance;
         }
     }
 

@@ -16,6 +16,7 @@ namespace FlappyBoids
         }
 
         public const int GatePoolSize = 12;
+        public const float DefaultCourseSpeed = 8.1f;
         public const float DefaultGateSpacing = 18f;
         public const float DefaultInitialHoleDiameter = 6.1f;
         public const float DefaultMinimumHoleDiameter = 3.8f;
@@ -29,6 +30,7 @@ namespace FlappyBoids
         [SerializeField] private GateWall[] _authoredGates = Array.Empty<GateWall>();
 
         [Header("Infinite gate difficulty")]
+        [SerializeField, Min(1f)] private float _courseSpeed = DefaultCourseSpeed;
         [SerializeField, Min(8f)] private float _gateSpacing = DefaultGateSpacing;
         [SerializeField, Min(1f)] private float _initialHoleDiameter = DefaultInitialHoleDiameter;
         [SerializeField, Min(1f)] private float _minimumHoleDiameter = DefaultMinimumHoleDiameter;
@@ -95,7 +97,7 @@ namespace FlappyBoids
             Application.targetFrameRate = 120;
             QualitySettings.vSyncCount = 0;
 
-            _swarm.Configure(_gates);
+            _swarm.Configure(_gates, _courseSpeed);
             _followCamera.Configure(this);
             _hud.Configure(this);
             UpdateGuidance();
@@ -151,6 +153,7 @@ namespace FlappyBoids
             if (flap) _audio.PlayFlap();
             if (_swarm.RemovedSinceLastFrame > 0) _audio.PlayHit(_swarm.RemovedSinceLastFrame);
 
+            AdvancePooledCourse(Time.deltaTime);
             RecyclePassedGates();
             UpdateGuidance();
 
@@ -220,6 +223,15 @@ namespace FlappyBoids
             if (obstaclesChanged) _swarm.RefreshGateObstacles(_gates);
         }
 
+        private void AdvancePooledCourse(float deltaTime)
+        {
+            float distance = _courseSpeed * Mathf.Max(0f, deltaTime);
+            Vector3 displacement = Vector3.back * distance;
+            for (int i = 0; i < _gates.Count; i++)
+                if (_gates[i] != null) _gates[i].transform.position += displacement;
+            if (_seaTerrain != null) _seaTerrain.AdvanceCourse(distance);
+        }
+
         private void PrepareInitialGatePool()
         {
             for (int i = 0; i < _gates.Count; i++)
@@ -261,6 +273,7 @@ namespace FlappyBoids
 
         private void NormalizeDifficultySettings()
         {
+            _courseSpeed = Mathf.Max(1f, _courseSpeed);
             _gateSpacing = Mathf.Max(8f, _gateSpacing);
             _initialHoleDiameter = Mathf.Max(1f, _initialHoleDiameter);
             _minimumHoleDiameter = Mathf.Clamp(

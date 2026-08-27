@@ -24,7 +24,7 @@ namespace FlappyBoids
 
     public struct FlockParameters : IComponentData
     {
-        public float ForwardSpeed;
+        public float CourseSpeed;
         public float MaxSpeed;
         public float MaxSteerForce;
         public float CohesionRadius;

@@ -34,6 +34,7 @@ namespace FlappyBoids
         private bool _configured;
         private Vector2 _guideCenter;
         private float _guideRadius;
+        private float _courseSpeed = FlappyBoidsGame.DefaultCourseSpeed;
 
         public int AliveCount { get; private set; }
         public int RemovedSinceLastFrame { get; private set; }
@@ -48,21 +49,22 @@ namespace FlappyBoids
             _fishVisualPrefabs = fishVisualPrefabs;
         }
 
-        public void Configure(IReadOnlyList<GateWall> gates)
+        public void Configure(IReadOnlyList<GateWall> gates, float courseSpeed = FlappyBoidsGame.DefaultCourseSpeed)
         {
+            _courseSpeed = Mathf.Max(1f, courseSpeed);
             _entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
             _boidQuery = _entityManager.CreateEntityQuery(
                 ComponentType.ReadOnly<BoidAgent>(), ComponentType.ReadOnly<LocalTransform>());
             _configured = true;
             CreateSingletons();
-            CreateGateEntities(gates);
+            CreateOrSyncGateEntities(gates);
             ResetSwarm();
         }
 
         public void RefreshGateObstacles(IReadOnlyList<GateWall> gates)
         {
             if (!_configured) return;
-            CreateGateEntities(gates);
+            CreateOrSyncGateEntities(gates);
         }
 
         public void ResetSwarm()
@@ -83,7 +85,7 @@ namespace FlappyBoids
                 float3 velocity = new float3(
                     UnityEngine.Random.Range(-0.5f, 0.5f),
                     UnityEngine.Random.Range(-0.35f, 0.35f),
-                    8.1f + UnityEngine.Random.Range(-0.35f, 0.35f));
+                    UnityEngine.Random.Range(-0.22f, 0.22f));
 
                 Entity entity = _entityManager.CreateEntity(typeof(BoidAgent), typeof(LocalTransform));
                 _entityManager.SetComponentData(entity, new BoidAgent
@@ -219,7 +221,7 @@ namespace FlappyBoids
 
             _entityManager.SetComponentData(_controlEntity, new FlockParameters
             {
-                ForwardSpeed = 8.1f,
+                CourseSpeed = _courseSpeed,
                 MaxSpeed = 11.2f,
                 MaxSteerForce = 11f,
                 CohesionRadius = 3.1f,
@@ -231,17 +233,21 @@ namespace FlappyBoids
             });
         }
 
-        private void CreateGateEntities(IReadOnlyList<GateWall> gates)
+        private void CreateOrSyncGateEntities(IReadOnlyList<GateWall> gates)
         {
             EntityQuery existing = _entityManager.CreateEntityQuery(ComponentType.ReadOnly<GateObstacle>());
-            if (!existing.IsEmptyIgnoreFilter) _entityManager.DestroyEntity(existing);
-            existing.Dispose();
-
-            for (int i = 0; i < gates.Count; i++)
+            if (existing.CalculateEntityCount() != gates.Count)
             {
-                Entity entity = _entityManager.CreateEntity(typeof(GateObstacle));
+                if (!existing.IsEmptyIgnoreFilter) _entityManager.DestroyEntity(existing);
+                for (int i = 0; i < gates.Count; i++)
+                    _entityManager.CreateEntity(typeof(GateObstacle));
+            }
+
+            NativeArray<Entity> obstacleEntities = existing.ToEntityArray(Allocator.Temp);
+            for (int i = 0; i < obstacleEntities.Length; i++)
+            {
                 GateWall gate = gates[i];
-                _entityManager.SetComponentData(entity, new GateObstacle
+                _entityManager.SetComponentData(obstacleEntities[i], new GateObstacle
                 {
                     Z = gate.Z,
                     HoleCenter = gate.HoleCenter,
@@ -249,6 +255,8 @@ namespace FlappyBoids
                     Thickness = GateWall.Thickness
                 });
             }
+            obstacleEntities.Dispose();
+            existing.Dispose();
         }
 
         private BirdVisual CreateFishVisual(int index)

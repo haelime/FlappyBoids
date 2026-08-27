@@ -11,20 +11,23 @@ namespace FlappyBoids
         [SerializeField] private MarchingCubesSeaChunk[] _chunks = Array.Empty<MarchingCubesSeaChunk>();
 
         private BoidSwarm _swarm;
+        private Vector3 _initialPosition;
 
         public void Configure(MarchingCubesSeaChunk[] chunks) =>
             _chunks = chunks ?? Array.Empty<MarchingCubesSeaChunk>();
 
         private void Awake()
         {
+            _initialPosition = transform.position;
             if (_chunks == null || _chunks.Length == 0)
                 _chunks = GetComponentsInChildren<MarchingCubesSeaChunk>(true);
             _swarm = FindAnyObjectByType<BoidSwarm>();
         }
 
-        private void LateUpdate()
+        public void AdvanceCourse(float distance)
         {
-            if (_swarm == null || _swarm.AliveCount <= 0 || _chunks.Length == 0) return;
+            if (distance <= 0f || _swarm == null || _chunks.Length == 0) return;
+            transform.position += Vector3.back * distance;
             while (TryGetExtremes(out MarchingCubesSeaChunk earliest, out int latestIndex) &&
                    _swarm.Center.z > earliest.transform.position.z + earliest.Length * 0.5f + _rearMargin)
             {
@@ -34,6 +37,7 @@ namespace FlappyBoids
 
         public void ResetTerrain()
         {
+            transform.position = _initialPosition;
             for (int i = 0; i < _chunks.Length; i++)
                 if (_chunks[i] != null) _chunks[i].ResetChunk();
         }
