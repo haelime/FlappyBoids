@@ -15,7 +15,11 @@ namespace FlappyBoids
             GameOver
         }
 
-        public const int TotalGates = 12;
+        public const int GatePoolSize = 12;
+        public const float DefaultGateSpacing = 18f;
+        public const float DefaultInitialHoleDiameter = 6.1f;
+        public const float DefaultMinimumHoleDiameter = 3.8f;
+        public const float DefaultHoleShrinkPerGate = 0.09f;
 
         [Header("Scene-authored references")]
         [SerializeField] private BoidSwarm _swarm;
@@ -24,7 +28,16 @@ namespace FlappyBoids
         [SerializeField] private FlappyBoidsHud _hud;
         [SerializeField] private GateWall[] _authoredGates = Array.Empty<GateWall>();
 
-        private readonly List<GateWall> _gates = new List<GateWall>(TotalGates);
+        [Header("Infinite gate difficulty")]
+        [SerializeField, Min(8f)] private float _gateSpacing = DefaultGateSpacing;
+        [SerializeField, Min(1f)] private float _initialHoleDiameter = DefaultInitialHoleDiameter;
+        [SerializeField, Min(1f)] private float _minimumHoleDiameter = DefaultMinimumHoleDiameter;
+        [SerializeField, Min(0f)] private float _holeShrinkPerGate = DefaultHoleShrinkPerGate;
+
+        private readonly List<GateWall> _gates = new List<GateWall>(GatePoolSize);
+        private GateSnapshot[] _initialGateStates = Array.Empty<GateSnapshot>();
+        private InfiniteCorridorScroller _corridorScroller;
+        private int _nextGateSequence;
         private bool _built;
 
         public RunState State { get; private set; }
@@ -32,6 +45,8 @@ namespace FlappyBoids
         public bool Won { get; private set; }
         public bool NewBest { get; private set; }
         public BoidSwarm Swarm => _swarm;
+        public float MinimumHoleDiameter => _minimumHoleDiameter;
+        public float NextHoleDiameter => GetNextGate()?.Diameter ?? _minimumHoleDiameter;
         public float NextGateDistance
         {
             get
@@ -73,6 +88,9 @@ namespace FlappyBoids
                 return;
             }
 
+            NormalizeDifficultySettings();
+            PrepareInitialGatePool();
+
             _built = true;
             Application.targetFrameRate = 120;
             QualitySettings.vSyncCount = 0;
@@ -90,6 +108,7 @@ namespace FlappyBoids
             if (_followCamera == null) _followCamera = GetComponentInChildren<FlappyBoidsCamera>(true);
             if (_audio == null) _audio = GetComponentInChildren<FlappyBoidsAudio>(true);
             if (_hud == null) _hud = GetComponentInChildren<FlappyBoidsHud>(true);
+            if (_corridorScroller == null) _corridorScroller = GetComponentInChildren<InfiniteCorridorScroller>(true);
 
             _gates.Clear();
             if (_authoredGates == null || _authoredGates.Length == 0)
@@ -132,22 +151,11 @@ namespace FlappyBoids
             if (flap) _audio.PlayFlap();
             if (_swarm.RemovedSinceLastFrame > 0) _audio.PlayHit(_swarm.RemovedSinceLastFrame);
 
-            for (int i = 0; i < _gates.Count; i++)
-            {
-                GateWall gate = _gates[i];
-                if (!gate.Passed && _swarm.Center.z > gate.Z + GateWall.Thickness + 1f)
-                {
-                    gate.Passed = true;
-                    WallsPassed++;
-                    _audio.PlayGate();
-                }
-            }
+            RecyclePassedGates();
             UpdateGuidance();
 
             if (_swarm.AliveCount <= 0)
                 FinishRun(false);
-            else if (WallsPassed >= TotalGates)
-                FinishRun(true);
         }
 
         private void FinishRun(bool won)
@@ -173,7 +181,8 @@ namespace FlappyBoids
 
         private void RestartAndLaunch()
         {
-            for (int i = 0; i < _gates.Count; i++) _gates[i].Passed = false;
+            RestoreInitialGatePool();
+            if (_corridorScroller != null) _corridorScroller.ResetPosition();
             WallsPassed = 0;
             Won = false;
             NewBest = false;
@@ -182,6 +191,102 @@ namespace FlappyBoids
             _swarm.SetInput(0f, true);
             State = RunState.Playing;
             _audio.PlayFlap();
+        }
+
+        private void RecyclePassedGates()
+        {
+            bool obstaclesChanged = false;
+            while (_gates.Count > 0 &&
+                   _swarm.Center.z > _gates[0].Z + GateWall.Thickness + 1f)
+            {
+                GateWall recycled = _gates[0];
+                GateWall previousLast = _gates[_gates.Count - 1];
+                Vector2 nextCenter = CalculateHoleCenter(_nextGateSequence, previousLast.HoleCenter);
+                recycled.transform.position = new Vector3(
+                    nextCenter.x, nextCenter.y, previousLast.Z + _gateSpacing);
+                recycled.SetHoleDiameter(CalculateHoleDiameter(
+                    _nextGateSequence, _initialHoleDiameter,
+                    _holeShrinkPerGate, _minimumHoleDiameter));
+                recycled.Passed = false;
+
+                _gates.RemoveAt(0);
+                _gates.Add(recycled);
+                _nextGateSequence++;
+                WallsPassed++;
+                obstaclesChanged = true;
+                _audio.PlayGate();
+            }
+
+            if (obstaclesChanged) _swarm.RefreshGateObstacles(_gates);
+        }
+
+        private void PrepareInitialGatePool()
+        {
+            for (int i = 0; i < _gates.Count; i++)
+            {
+                _gates[i].SetHoleDiameter(CalculateHoleDiameter(
+                    i, _initialHoleDiameter, _holeShrinkPerGate, _minimumHoleDiameter));
+                _gates[i].Passed = false;
+            }
+
+            _initialGateStates = new GateSnapshot[_gates.Count];
+            for (int i = 0; i < _gates.Count; i++)
+            {
+                _initialGateStates[i] = new GateSnapshot
+                {
+                    Gate = _gates[i],
+                    Position = _gates[i].transform.position,
+                    Diameter = _gates[i].Diameter
+                };
+            }
+            _nextGateSequence = _gates.Count;
+        }
+
+        private void RestoreInitialGatePool()
+        {
+            _gates.Clear();
+            for (int i = 0; i < _initialGateStates.Length; i++)
+            {
+                GateSnapshot state = _initialGateStates[i];
+                if (state.Gate == null) continue;
+                state.Gate.transform.position = state.Position;
+                state.Gate.SetHoleDiameter(state.Diameter);
+                state.Gate.Passed = false;
+                _gates.Add(state.Gate);
+            }
+            _gates.Sort((left, right) => left.Z.CompareTo(right.Z));
+            _nextGateSequence = _gates.Count;
+            _swarm.RefreshGateObstacles(_gates);
+        }
+
+        private void NormalizeDifficultySettings()
+        {
+            _gateSpacing = Mathf.Max(8f, _gateSpacing);
+            _initialHoleDiameter = Mathf.Max(1f, _initialHoleDiameter);
+            _minimumHoleDiameter = Mathf.Clamp(
+                _minimumHoleDiameter, 1f, _initialHoleDiameter);
+            _holeShrinkPerGate = Mathf.Max(0f, _holeShrinkPerGate);
+        }
+
+        public static float CalculateHoleDiameter(
+            int gateIndex,
+            float initialDiameter = DefaultInitialHoleDiameter,
+            float shrinkPerGate = DefaultHoleShrinkPerGate,
+            float minimumDiameter = DefaultMinimumHoleDiameter)
+        {
+            float initial = Mathf.Max(1f, initialDiameter);
+            float minimum = Mathf.Clamp(minimumDiameter, 1f, initial);
+            return Mathf.Max(minimum, initial - Mathf.Max(0, gateIndex) * Mathf.Max(0f, shrinkPerGate));
+        }
+
+        public static Vector2 CalculateHoleCenter(int gateIndex, Vector2 previousCenter)
+        {
+            if (gateIndex <= 0) return new Vector2(0f, 5.5f);
+            var random = new System.Random(unchecked(9147 + gateIndex * 48611));
+            Vector2 target = new Vector2(
+                Mathf.Lerp(-3.25f, 3.25f, (float)random.NextDouble()),
+                Mathf.Lerp(3.25f, 8.65f, (float)random.NextDouble()));
+            return Vector2.Lerp(previousCenter, target, 0.72f);
         }
 
         public Vector3 GetCameraPathPoint(float cameraZ)
@@ -247,6 +352,49 @@ namespace FlappyBoids
                 Gizmos.DrawWireSphere(next, 0.32f);
                 previous = next;
             }
+        }
+
+        private struct GateSnapshot
+        {
+            public GateWall Gate;
+            public Vector3 Position;
+            public float Diameter;
+        }
+    }
+
+    [DefaultExecutionOrder(150)]
+    [DisallowMultipleComponent]
+    public sealed class InfiniteCorridorScroller : MonoBehaviour
+    {
+        [SerializeField, Min(40f)] private float _segmentLength = 280f;
+        [SerializeField, Min(20f)] private float _advanceDistance = 160f;
+        [SerializeField, Min(5f)] private float _rearSafetyMargin = 50f;
+        [SerializeField] private float _segmentCenterLocalZ = 117f;
+
+        private BoidSwarm _swarm;
+        private Vector3 _initialPosition;
+
+        private void Awake()
+        {
+            _initialPosition = transform.position;
+            _swarm = GetComponentInParent<BoidSwarm>();
+            if (_swarm == null) _swarm = FindAnyObjectByType<BoidSwarm>();
+        }
+
+        private void LateUpdate()
+        {
+            if (_swarm == null || _swarm.AliveCount <= 0) return;
+            float segmentEnd = transform.position.z + _segmentCenterLocalZ + _segmentLength * 0.5f;
+            while (_swarm.Center.z > segmentEnd - _rearSafetyMargin)
+            {
+                transform.position += Vector3.forward * _advanceDistance;
+                segmentEnd += _advanceDistance;
+            }
+        }
+
+        public void ResetPosition()
+        {
+            transform.position = _initialPosition;
         }
     }
 }

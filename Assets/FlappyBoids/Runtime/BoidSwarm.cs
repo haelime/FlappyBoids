@@ -59,6 +59,12 @@ namespace FlappyBoids
             ResetSwarm();
         }
 
+        public void RefreshGateObstacles(IReadOnlyList<GateWall> gates)
+        {
+            if (!_configured) return;
+            CreateGateEntities(gates);
+        }
+
         public void ResetSwarm()
         {
             if (_configured) _entityManager.DestroyEntity(_boidQuery);

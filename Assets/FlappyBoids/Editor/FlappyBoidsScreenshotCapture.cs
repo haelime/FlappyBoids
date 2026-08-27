@@ -73,11 +73,11 @@ namespace FlappyBoids.Editor
 
         private static void StageHud(Transform canvas)
         {
-            SetActive(canvas, "Ready Panel - Abyss Amber Palette v2", false);
-            SetActive(canvas, "Result Panel - Abyss Amber Palette v2", false);
+            SetActive(canvas, "Ready Panel - Infinite Course v3", false);
+            SetActive(canvas, "Result Panel - Infinite Course v3", false);
             SetText(canvas, "School Counter/Value", "31 / 42");
-            SetText(canvas, "Pipe Counter/Value", "05 / 12");
-            SetText(canvas, "Route Guidance/Next Pipe + Flock Fit", "NEXT PIPE  8m    FLOCK FIT  86%");
+            SetText(canvas, "Pipe Counter/Value", "05");
+            SetText(canvas, "Route Guidance/Next Pipe + Flock Fit", "NEXT  8m    HOLE  5.7m    FIT  86%");
 
             Transform fill = canvas.Find("Route Guidance/Flock Fit Bar/Fill");
             if (fill != null && fill.TryGetComponent(out Image image))
@@ -139,7 +139,7 @@ namespace FlappyBoids.Editor
         private static void StageBubbles()
         {
             foreach (ParticleSystem particles in UnityEngine.Object.FindObjectsByType<ParticleSystem>(
-                         FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                         FindObjectsInactive.Exclude))
             {
                 particles.Simulate(2.8f, true, true, true);
             }

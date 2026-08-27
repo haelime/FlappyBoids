@@ -59,9 +59,10 @@ namespace FlappyBoids
             int alive = _game.Swarm.AliveCount;
             float formationFit = _game.Swarm.FormationFit;
             if (_schoolCount != null) _schoolCount.text = $"{alive:00} / {BoidSwarm.StartingBoids}";
-            if (_pipesCount != null) _pipesCount.text = $"{_game.WallsPassed:00} / {FlappyBoidsGame.TotalGates}";
+            if (_pipesCount != null) _pipesCount.text = $"{_game.WallsPassed:00}";
             if (_routeStatus != null)
-                _routeStatus.text = $"NEXT PIPE  {_game.NextGateDistance:0}m    FLOCK FIT  {formationFit * 100f:0}%";
+                _routeStatus.text =
+                    $"NEXT  {_game.NextGateDistance:0}m    HOLE  {_game.NextHoleDiameter:0.0}m    FIT  {formationFit * 100f:0}%";
             if (_fitFill != null)
             {
                 _fitFill.fillAmount = formationFit;
@@ -80,10 +81,8 @@ namespace FlappyBoids
             if (!gameOver) return;
             if (_resultTitle != null)
             {
-                _resultTitle.text = _game.Won ? "SCHOOL MADE IT!" : "SCHOOL LOST";
-                _resultTitle.color = _game.Won
-                    ? new Color(0.91f, 0.87f, 0.74f, 1f)
-                    : new Color(0.88f, 0.25f, 0.16f, 1f);
+                _resultTitle.text = "RUN ENDED";
+                _resultTitle.color = new Color(0.88f, 0.25f, 0.16f, 1f);
             }
             if (_resultStats != null)
                 _resultStats.text = $"PIPES  {_game.WallsPassed:00}     FINAL FISH  {alive:00}";

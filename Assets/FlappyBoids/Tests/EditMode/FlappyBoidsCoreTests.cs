@@ -103,6 +103,26 @@ namespace FlappyBoids.Tests
             Assert.That(point.y, Is.EqualTo(expectedY).Within(0.0001f));
         }
 
+        [TestCase(0, 6.1f)]
+        [TestCase(10, 5.2f)]
+        [TestCase(26, 3.8f)]
+        [TestCase(200, 3.8f)]
+        public void InfiniteDifficulty_ShrinksHoleAndClampsAtMinimum(int gateIndex, float expected)
+        {
+            float diameter = FlappyBoidsGame.CalculateHoleDiameter(gateIndex);
+
+            Assert.That(diameter, Is.EqualTo(expected).Within(0.0001f));
+            Assert.That(diameter, Is.GreaterThanOrEqualTo(FlappyBoidsGame.DefaultMinimumHoleDiameter));
+        }
+
+        [Test]
+        public void InfiniteDifficulty_NeverLetsInvalidMinimumExceedInitialDiameter()
+        {
+            float diameter = FlappyBoidsGame.CalculateHoleDiameter(100, 5f, 1f, 8f);
+
+            Assert.That(diameter, Is.EqualTo(5f));
+        }
+
         [TestCase(3, 8, 2, 42, true)]
         [TestCase(3, 9, 3, 8, true)]
         [TestCase(3, 7, 3, 8, false)]

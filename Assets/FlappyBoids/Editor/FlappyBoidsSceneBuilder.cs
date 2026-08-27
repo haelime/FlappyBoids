@@ -37,7 +37,7 @@ namespace FlappyBoids.Editor
             Root + "/Imported/IdleTogetherUI/Textures/FrameBlueDoubleBorder.png";
         private const string IdlePanelSpritePath =
             Root + "/Imported/IdleTogetherUI/Textures/PanelGrayRelief.png";
-        private const string ExternalAssetSceneMarker = "Ready Panel - Abyss Amber Palette v2";
+        private const string ExternalAssetSceneMarker = "Ready Panel - Infinite Course v3";
 
         [InitializeOnLoadMethod]
         private static void QueueExternalAssetSceneUpgrade()
@@ -434,11 +434,12 @@ namespace FlappyBoids.Editor
             RenderSettings.sun = sun;
 
             Transform environment = Group("04_Environment", gameRoot.transform);
-            BuildCorridor(environment, materials);
-            BuildGuides(environment, materials);
-            BuildDecorations(environment, seaGrassPrefab, bubblePrefab, shortPipePrefabs, scene);
+            Transform infiniteScenery = Group("01_Infinite Scenery", environment);
+            infiniteScenery.gameObject.AddComponent<InfiniteCorridorScroller>();
+            BuildCorridor(infiniteScenery, materials);
+            BuildGuides(infiniteScenery, materials);
+            BuildDecorations(infiniteScenery, seaGrassPrefab, bubblePrefab, shortPipePrefabs, scene);
             GateWall[] gates = BuildGates(environment, pipePrefab, scene);
-            BuildFinish(environment, materials);
             FlappyBoidsHud hud = BuildHud(gameRoot.transform, camera, uiFramePrefab);
 
             game.ConfigureScene(swarm, followCamera, audio, hud, gates);
@@ -522,36 +523,20 @@ namespace FlappyBoids.Editor
         private static GateWall[] BuildGates(Transform environment, GameObject pipePrefab, Scene scene)
         {
             Transform root = Group("04_Pipe Gates (Prefab Instances)", environment);
-            var gates = new List<GateWall>(FlappyBoidsGame.TotalGates);
-            var random = new System.Random(7331);
+            var gates = new List<GateWall>(FlappyBoidsGame.GatePoolSize);
             Vector2 previousCenter = new Vector2(0f, 5.5f);
-            for (int i = 0; i < FlappyBoidsGame.TotalGates; i++)
+            for (int i = 0; i < FlappyBoidsGame.GatePoolSize; i++)
             {
-                float z = 23f + i * 18f;
-                float x = i == 0 ? 0f : Mathf.Lerp(previousCenter.x,
-                    Mathf.Lerp(-3.25f, 3.25f, (float)random.NextDouble()), 0.72f);
-                float y = i == 0 ? 5.5f : Mathf.Lerp(previousCenter.y,
-                    Mathf.Lerp(3.25f, 8.65f, (float)random.NextDouble()), 0.72f);
+                float z = 23f + i * FlappyBoidsGame.DefaultGateSpacing;
+                Vector2 center = FlappyBoidsGame.CalculateHoleCenter(i, previousCenter);
                 GameObject instance = InstantiatePrefab(pipePrefab, root, scene, $"Pipe Gate {i + 1:00}");
-                instance.transform.position = new Vector3(x, y, z);
+                instance.transform.position = new Vector3(center.x, center.y, z);
                 GateWall gate = instance.GetComponent<GateWall>();
-                gate.SetHoleDiameter(6.1f);
+                gate.SetHoleDiameter(FlappyBoidsGame.CalculateHoleDiameter(i));
                 gates.Add(gate);
-                previousCenter = new Vector2(x, y);
+                previousCenter = center;
             }
             return gates.ToArray();
-        }
-
-        private static void BuildFinish(Transform environment, Materials materials)
-        {
-            Transform finish = Group("05_Finish", environment);
-            float z = 23f + (FlappyBoidsGame.TotalGates - 1) * 18f + 8f;
-            CreatePart(PrimitiveType.Cube, "Finish Left", finish,
-                new Vector3(-6.5f, 4f, z), new Vector3(0.4f, 8f, 0.4f), materials.FishGold, false);
-            CreatePart(PrimitiveType.Cube, "Finish Right", finish,
-                new Vector3(6.5f, 4f, z), new Vector3(0.4f, 8f, 0.4f), materials.FishGold, false);
-            CreatePart(PrimitiveType.Cube, "Finish Beam", finish,
-                new Vector3(0f, 8f, z), new Vector3(13.4f, 0.4f, 0.4f), materials.FishGold, false);
         }
 
         private static FlappyBoidsHud BuildHud(
@@ -594,21 +579,21 @@ namespace FlappyBoids.Editor
                 new Vector2(-137f, -63f), new Vector2(230f, 82f), panelColor, panelSprite);
             CreateUiText("Label", pipesPanel, "PIPES CLEARED", font, 14, secondary,
                 TextAnchor.MiddleCenter, new Vector2(0f, 20f), new Vector2(210f, 24f), FontStyle.Bold);
-            Text pipeCount = CreateUiText("Value", pipesPanel, $"00 / {FlappyBoidsGame.TotalGates}",
+            Text pipeCount = CreateUiText("Value", pipesPanel, "00",
                 font, 28, primary, TextAnchor.MiddleCenter, new Vector2(0f, -10f), new Vector2(210f, 42f), FontStyle.Bold);
 
             RectTransform routePanel = CreateUiPanel(
                 "Route Guidance", canvasObject.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0f, -54f), new Vector2(390f, 68f), panelColor, panelSprite);
+                new Vector2(0f, -54f), new Vector2(470f, 68f), panelColor, panelSprite);
             Text routeStatus = CreateUiText("Next Pipe + Flock Fit", routePanel,
-                "NEXT PIPE  23m    FLOCK FIT  100%", font, 17, primary,
-                TextAnchor.MiddleCenter, new Vector2(0f, 17f), new Vector2(370f, 24f), FontStyle.Bold);
+                "NEXT  23m    HOLE  6.1m    FIT  100%", font, 17, primary,
+                TextAnchor.MiddleCenter, new Vector2(0f, 17f), new Vector2(450f, 24f), FontStyle.Bold);
             RectTransform fitBackground = CreateUiPanel(
                 "Flock Fit Bar", routePanel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -18f), new Vector2(350f, 12f), new Color(0.01f, 0.025f, 0.045f, 0.95f));
+                new Vector2(0f, -18f), new Vector2(430f, 12f), new Color(0.01f, 0.025f, 0.045f, 0.95f));
             RectTransform fillRect = CreateUiPanel(
                 "Fill", fitBackground, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                Vector2.zero, new Vector2(346f, 8f), new Color(0.36f, 0.66f, 0.43f, 1f));
+                Vector2.zero, new Vector2(426f, 8f), new Color(0.36f, 0.66f, 0.43f, 1f));
             Image fitFill = fillRect.GetComponent<Image>();
             fitFill.type = Image.Type.Filled;
             fitFill.fillMethod = Image.FillMethod.Horizontal;
@@ -616,13 +601,13 @@ namespace FlappyBoids.Editor
             fitFill.fillAmount = 1f;
 
             RectTransform readyPanel = InstantiateUiFrame(
-                uiFramePrefab, canvasObject.transform, "Ready Panel - Abyss Amber Palette v2",
+                uiFramePrefab, canvasObject.transform, "Ready Panel - Infinite Course v3",
                 new Vector2(620f, 310f));
             CreateUiText("Title", readyPanel, "FLAPPY BOIDS: DEEP RUN", headingFont, 44,
                 primary, TextAnchor.MiddleCenter,
                 new Vector2(0f, 96f), new Vector2(570f, 64f), FontStyle.Bold);
             CreateUiText("Brief", readyPanel,
-                "Guide the whole school through 12 underwater pipes.\nEvery fish that touches a pipe is lost.",
+                "Swim through an endless chain of underwater pipes.\nThe opening narrows to 3.8m. Every collision costs one fish.",
                 font, 19, primary, TextAnchor.MiddleCenter, new Vector2(0f, 25f), new Vector2(540f, 72f));
             CreateUiText("Controls", readyPanel,
                 "LEFT / RIGHT  STEER        SPACE  KICK + SCHOOL UP", font, 19, accent,
@@ -631,9 +616,9 @@ namespace FlappyBoids.Editor
                 TextAnchor.MiddleCenter, new Vector2(0f, -104f), new Vector2(420f, 30f), FontStyle.Bold);
 
             RectTransform resultPanel = InstantiateUiFrame(
-                uiFramePrefab, canvasObject.transform, "Result Panel - Abyss Amber Palette v2",
+                uiFramePrefab, canvasObject.transform, "Result Panel - Infinite Course v3",
                 new Vector2(620f, 350f));
-            Text resultTitle = CreateUiText("Title", resultPanel, "SCHOOL MADE IT!", headingFont, 44,
+            Text resultTitle = CreateUiText("Title", resultPanel, "RUN ENDED", headingFont, 44,
                 primary, TextAnchor.MiddleCenter,
                 new Vector2(0f, 112f), new Vector2(570f, 60f), FontStyle.Bold);
             Text resultStats = CreateUiText("Run Stats", resultPanel, "PIPES  00     FINAL FISH  00", font, 20,
