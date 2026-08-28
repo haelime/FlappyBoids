@@ -9,6 +9,13 @@ namespace FlappyBoids
         [SerializeField] private Material _rockMaterial;
         [SerializeField] private Material _lipMaterial;
 
+        [Header("Authored hierarchy")]
+        [SerializeField] private MeshFilter _rockFilter;
+        [SerializeField] private MeshRenderer _rockRenderer;
+        [SerializeField] private Transform _lipRoot;
+        [SerializeField] private MeshFilter _lipFilter;
+        [SerializeField] private MeshRenderer _lipRenderer;
+
         [Header("Rugged rock authoring")]
         [SerializeField] private int _seed = 917;
         [SerializeField, Range(0.15f, 1.8f)] private float _roughness = 0.92f;
@@ -17,6 +24,7 @@ namespace FlappyBoids
         [SerializeField, Range(24, 44)] private int _crossSectionCells = 34;
         [SerializeField, Range(6, 12)] private int _depthCells = 8;
         [SerializeField] private bool _faceted = true;
+        [SerializeField, Range(0.08f, 0.30f)] private float _lipThickness = 0.16f;
 
         private Mesh _rockMesh;
         private Mesh _lipMesh;
@@ -24,10 +32,22 @@ namespace FlappyBoids
 
         public int TriangleCount => _rockMesh == null ? 0 : _rockMesh.triangles.Length / 3;
 
-        public void Configure(Material rockMaterial, Material lipMaterial)
+        public void Configure(
+            Material rockMaterial,
+            Material lipMaterial,
+            MeshFilter rockFilter,
+            MeshRenderer rockRenderer,
+            Transform lipRoot,
+            MeshFilter lipFilter,
+            MeshRenderer lipRenderer)
         {
             _rockMaterial = rockMaterial;
             _lipMaterial = lipMaterial;
+            _rockFilter = rockFilter;
+            _rockRenderer = rockRenderer;
+            _lipRoot = lipRoot;
+            _lipFilter = lipFilter;
+            _lipRenderer = lipRenderer;
             Rebuild();
         }
 
@@ -38,14 +58,18 @@ namespace FlappyBoids
             if (_rebuilding || !isActiveAndEnabled) return;
             GateWall gate = GetComponent<GateWall>();
             if (gate == null) return;
+            if (_rockFilter == null || _rockRenderer == null || _lipRoot == null ||
+                _lipFilter == null || _lipRenderer == null)
+            {
+                Debug.LogError(
+                    $"{nameof(MarchingCubesGateVisual)} on '{name}' requires its authored rock and mineral-lip hierarchy.",
+                    this);
+                return;
+            }
             _rebuilding = true;
             try
             {
-                MeshFilter rockFilter = GetComponent<MeshFilter>();
-                if (rockFilter == null) rockFilter = gameObject.AddComponent<MeshFilter>();
-                MeshRenderer rockRenderer = GetComponent<MeshRenderer>();
-                if (rockRenderer == null) rockRenderer = gameObject.AddComponent<MeshRenderer>();
-                rockRenderer.sharedMaterial = _rockMaterial;
+                _rockRenderer.sharedMaterial = _rockMaterial;
                 Mesh ruggedRock = MarchingCubesMeshBuilder.Build(
                     "Marching Cubes Gate Rock",
                     new Bounds(Vector3.zero, new Vector3(26f, 20f, 4.2f)),
@@ -53,27 +77,18 @@ namespace FlappyBoids
                     point => GateDensity(point, gate.Radius));
                 if (_faceted) MarchingCubesMeshBuilder.MakeFaceted(ruggedRock);
                 ReplaceMesh(ref _rockMesh, ruggedRock);
-                rockFilter.sharedMesh = _rockMesh;
+                _rockFilter.sharedMesh = _rockMesh;
 
-                Transform lip = transform.Find("Marching Cubes Mineral Lip");
-                if (lip == null)
-                {
-                    var lipObject = new GameObject("Marching Cubes Mineral Lip");
-                    lipObject.transform.SetParent(transform, false);
-                    lip = lipObject.transform;
-                }
-                MeshFilter lipFilter = lip.GetComponent<MeshFilter>();
-                if (lipFilter == null) lipFilter = lip.gameObject.AddComponent<MeshFilter>();
-                MeshRenderer lipRenderer = lip.GetComponent<MeshRenderer>();
-                if (lipRenderer == null) lipRenderer = lip.gameObject.AddComponent<MeshRenderer>();
-                lipRenderer.sharedMaterial = _lipMaterial;
-                float lipSpan = gate.Diameter + 2.2f;
+                _lipRoot.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+                _lipRoot.localScale = Vector3.one;
+                _lipRenderer.sharedMaterial = _lipMaterial;
+                float lipSpan = gate.Diameter + 1.6f;
                 ReplaceMesh(ref _lipMesh, MarchingCubesMeshBuilder.Build(
                     "Marching Cubes Mineral Lip",
-                    new Bounds(Vector3.zero, new Vector3(lipSpan, lipSpan, 2.2f)),
+                    new Bounds(Vector3.zero, new Vector3(lipSpan, lipSpan, 1.8f)),
                     new Vector3Int(24, 24, 6),
-                    point => LipDensity(point, gate.Radius)));
-                lipFilter.sharedMesh = _lipMesh;
+                    point => LipDensity(point, gate.Radius, _lipThickness)));
+                _lipFilter.sharedMesh = _lipMesh;
             }
             finally
             {
@@ -94,12 +109,12 @@ namespace FlappyBoids
             return Mathf.Min(slab, outsideHole);
         }
 
-        private static float LipDensity(Vector3 point, float radius)
+        private static float LipDensity(Vector3 point, float radius, float thickness)
         {
             float radial = new Vector2(point.x, point.y).magnitude;
             float ringDistance = Mathf.Sqrt(
-                Mathf.Pow(radial - (radius + 0.20f), 2f) + point.z * point.z);
-            return 0.20f - ringDistance;
+                Mathf.Pow(radial - (radius + thickness), 2f) + point.z * point.z);
+            return thickness - ringDistance;
         }
 
         private static void ReplaceMesh(ref Mesh current, Mesh replacement)

@@ -293,10 +293,27 @@ namespace FlappyBoids.Editor
         private static GameObject CreateMarchingCubesGatePrefab(Materials materials)
         {
             var root = new GameObject("P_MarchingCubesRockGate");
+            root.SetActive(false);
             GateWall gate = root.AddComponent<GateWall>();
+            MeshFilter rockFilter = root.AddComponent<MeshFilter>();
+            MeshRenderer rockRenderer = root.AddComponent<MeshRenderer>();
+
+            var lipObject = new GameObject("Marching Cubes Mineral Lip");
+            lipObject.transform.SetParent(root.transform, false);
+            MeshFilter lipFilter = lipObject.AddComponent<MeshFilter>();
+            MeshRenderer lipRenderer = lipObject.AddComponent<MeshRenderer>();
+
             MarchingCubesGateVisual visual = root.AddComponent<MarchingCubesGateVisual>();
-            visual.Configure(materials.Rock, materials.PipeAccent);
             gate.SetHoleDiameter(6.1f);
+            visual.Configure(
+                materials.Rock,
+                materials.PipeAccent,
+                rockFilter,
+                rockRenderer,
+                lipObject.transform,
+                lipFilter,
+                lipRenderer);
+            root.SetActive(true);
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root,
                 $"{EnvironmentPrefabFolder}/P_MarchingCubesRockGate.prefab");
             Object.DestroyImmediate(root);

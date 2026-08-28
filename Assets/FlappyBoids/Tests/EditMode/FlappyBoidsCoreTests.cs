@@ -18,6 +18,10 @@ namespace FlappyBoids.Tests
             "Assets/FlappyBoids/Prefabs/UI/P_BlueCurrentModal.prefab";
         private const string DeepOceanVolumePath =
             "Assets/FlappyBoids/Art/Profiles/VP_DeepOcean.asset";
+        private const string MarchingCubesGatePrefabPath =
+            "Assets/FlappyBoids/Prefabs/Environment/P_MarchingCubesRockGate.prefab";
+        private const string MarchingCubesGateRuntimePath =
+            "Assets/FlappyBoids/Runtime/MarchingCubesGateVisual.cs";
         private const string GameRuntimePath = "Assets/FlappyBoids/Runtime/FlappyBoidsGame.cs";
         private const string HudRuntimePath = "Assets/FlappyBoids/Runtime/FlappyBoidsHud.cs";
 
@@ -60,6 +64,32 @@ namespace FlappyBoids.Tests
             Assert.That(sceneYaml, Does.Contain("02_Marching Cubes Rock Gates"));
             Assert.That(sceneYaml, Does.Not.Contain("01_Corridor"));
             Assert.That(sceneYaml, Does.Not.Contain("03_Decorations"));
+        }
+
+        [Test]
+        public void MarchingCubesGate_HasAuthoredMineralLipWithoutRuntimeFallback()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(MarchingCubesGatePrefabPath);
+            Assert.That(prefab, Is.Not.Null);
+
+            Transform lip = prefab.transform.Find("Marching Cubes Mineral Lip");
+            Assert.That(lip, Is.Not.Null);
+            Assert.That(lip.GetComponent<MeshFilter>(), Is.Not.Null);
+            Assert.That(lip.GetComponent<MeshRenderer>(), Is.Not.Null);
+
+            MarchingCubesGateVisual visual = prefab.GetComponent<MarchingCubesGateVisual>();
+            Assert.That(visual, Is.Not.Null);
+            var serializedVisual = new SerializedObject(visual);
+            Assert.That(serializedVisual.FindProperty("_rockFilter").objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedVisual.FindProperty("_rockRenderer").objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedVisual.FindProperty("_lipRoot").objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedVisual.FindProperty("_lipFilter").objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedVisual.FindProperty("_lipRenderer").objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedVisual.FindProperty("_lipThickness").floatValue, Is.EqualTo(0.16f));
+
+            string source = File.ReadAllText(MarchingCubesGateRuntimePath);
+            Assert.That(source, Does.Not.Match(@"new\s+GameObject\s*\("));
+            Assert.That(source, Does.Not.Match(@"\bAddComponent\s*<"));
         }
 
         [Test]
