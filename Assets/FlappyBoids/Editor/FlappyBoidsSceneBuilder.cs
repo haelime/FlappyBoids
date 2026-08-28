@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -17,8 +18,10 @@ namespace FlappyBoids.Editor
         private const string FishPrefabFolder = Root + "/Prefabs/Fish";
         private const string EnvironmentPrefabFolder = Root + "/Prefabs/Environment";
         private const string UiPrefabFolder = Root + "/Prefabs/UI";
+        private const string ProfileFolder = Root + "/Art/Profiles";
         private const string SceneFolder = Root + "/Scenes";
         private const string ScenePath = SceneFolder + "/FlappyBoids.unity";
+        private const string DeepOceanVolumePath = ProfileFolder + "/VP_DeepOcean.asset";
         private const string WaterMaterialPath =
             Root + "/ThirdParty/UberStylizedWater/Template Materials/UWa-Template-Murky.mat";
         private const string BubblePrefabPath =
@@ -29,11 +32,12 @@ namespace FlappyBoids.Editor
             Root + "/Imported/IdleTogetherUI/Fonts/FusionPixel10Korean.ttf";
         private const string IdleHeadingFontPath =
             Root + "/Imported/IdleTogetherUI/Fonts/FusionPixel12Latin.ttf";
-        private const string IdleFrameSpritePath =
+        private const string BlueFrameSpritePath =
             Root + "/Imported/IdleTogetherUI/Textures/FrameBlueDoubleBorder.png";
-        private const string IdlePanelSpritePath =
-            Root + "/Imported/IdleTogetherUI/Textures/PanelGrayRelief.png";
-        private const string HudCardPrefabPath = UiPrefabFolder + "/P_UnderwaterHudCard.prefab";
+        private const string BluePanelSpritePath =
+            Root + "/Imported/IdleTogetherUI/Textures/PanelBlueRelief.png";
+        private const string BlueModalPrefabPath = UiPrefabFolder + "/P_BlueCurrentModal.prefab";
+        private const string BlueHudPlatePrefabPath = UiPrefabFolder + "/P_BlueCurrentHudPlate.prefab";
         private const string ExternalAssetSceneMarker = "01_Marching Cubes Infinite Sea";
 
         [InitializeOnLoadMethod]
@@ -77,11 +81,15 @@ namespace FlappyBoids.Editor
                 CreateFishPrefab("P_Fish_Coral", materials.FishCoral, materials)
             };
             GameObject gatePrefab = CreateMarchingCubesGatePrefab(materials);
-            GameObject uiFramePrefab = CreateIdleTogetherUiFramePrefab();
-            GameObject hudCardPrefab = CreateUnderwaterHudCardPrefab();
+            GameObject uiFramePrefab = CreateBlueCurrentModalPrefab();
+            GameObject hudCardPrefab = CreateBlueCurrentHudPlatePrefab();
+            VolumeProfile volumeProfile = CreateDeepOceanVolumeProfile();
             GameObject bubblePrefab = LoadRequiredAsset<GameObject>(BubblePrefabPath);
-            CreateScene(materials, fishPrefabs, gatePrefab, bubblePrefab, uiFramePrefab, hudCardPrefab);
+            CreateScene(
+                materials, fishPrefabs, gatePrefab, bubblePrefab,
+                uiFramePrefab, hudCardPrefab, volumeProfile);
             DeleteLegacyEnvironmentPrefabs();
+            DeleteLegacyUiPrefabs();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             ValidateScenePrefabReferences();
@@ -92,8 +100,9 @@ namespace FlappyBoids.Editor
         public static void RebuildAuthoredHud()
         {
             EnsureFolders();
-            GameObject modalPrefab = CreateIdleTogetherUiFramePrefab();
-            GameObject cardPrefab = CreateUnderwaterHudCardPrefab();
+            GameObject modalPrefab = CreateBlueCurrentModalPrefab();
+            GameObject cardPrefab = CreateBlueCurrentHudPlatePrefab();
+            VolumeProfile volumeProfile = CreateDeepOceanVolumeProfile();
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             FlappyBoidsGame game = Object.FindAnyObjectByType<FlappyBoidsGame>(FindObjectsInactive.Include);
             Camera camera = Object.FindAnyObjectByType<FlappyBoidsCamera>(FindObjectsInactive.Include)
@@ -104,12 +113,14 @@ namespace FlappyBoids.Editor
             Transform oldUi = game.transform.Find("05_UI");
             if (oldUi != null) Object.DestroyImmediate(oldUi.gameObject);
             FlappyBoidsHud hud = BuildHud(game.transform, camera, modalPrefab, cardPrefab);
+            ApplyUnderwaterLook(game.transform, camera, volumeProfile);
             var serializedGame = new SerializedObject(game);
             serializedGame.FindProperty("_hud").objectReferenceValue = hud;
             serializedGame.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(game);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
+            DeleteLegacyUiPrefabs();
             AssetDatabase.SaveAssets();
             ValidateScenePrefabReferences();
             Debug.Log($"FlappyBoids authored HUD rebuilt: {ScenePath}");
@@ -160,6 +171,17 @@ namespace FlappyBoids.Editor
                 if (AssetDatabase.LoadMainAssetAtPath(asset) != null) AssetDatabase.DeleteAsset(asset);
         }
 
+        private static void DeleteLegacyUiPrefabs()
+        {
+            string[] legacyAssets =
+            {
+                UiPrefabFolder + "/P_IdleTogetherPixelFrame.prefab",
+                UiPrefabFolder + "/P_UnderwaterHudCard.prefab"
+            };
+            foreach (string asset in legacyAssets)
+                if (AssetDatabase.LoadMainAssetAtPath(asset) != null) AssetDatabase.DeleteAsset(asset);
+        }
+
         private static void EnsureFolders()
         {
             EnsureFolder(Root + "/Art");
@@ -168,6 +190,7 @@ namespace FlappyBoids.Editor
             EnsureFolder(FishPrefabFolder);
             EnsureFolder(EnvironmentPrefabFolder);
             EnsureFolder(UiPrefabFolder);
+            EnsureFolder(ProfileFolder);
             EnsureFolder(SceneFolder);
         }
 
@@ -280,64 +303,105 @@ namespace FlappyBoids.Editor
             return prefab;
         }
 
-        private static GameObject CreateIdleTogetherUiFramePrefab()
+        private static GameObject CreateBlueCurrentModalPrefab()
         {
-            Sprite frameSprite = LoadRequiredAsset<Sprite>(IdleFrameSpritePath);
-            Sprite panelSprite = LoadRequiredAsset<Sprite>(IdlePanelSpritePath);
+            Sprite frameSprite = LoadRequiredAsset<Sprite>(BlueFrameSpritePath);
+            Sprite panelSprite = LoadRequiredAsset<Sprite>(BluePanelSpritePath);
 
             var root = new GameObject(
-                "P_IdleTogetherPixelFrame", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                "P_BlueCurrentModal", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             RectTransform rootRect = root.GetComponent<RectTransform>();
-            rootRect.sizeDelta = new Vector2(620f, 350f);
+            rootRect.sizeDelta = new Vector2(820f, 470f);
             ConfigureSlicedImage(
-                root.GetComponent<Image>(), frameSprite, new Color(0.24f, 0.31f, 0.27f, 1f));
+                root.GetComponent<Image>(), frameSprite, new Color(0.08f, 0.42f, 0.66f, 1f));
 
             RectTransform content = CreateUiImage(
-                "Content Backdrop", rootRect, panelSprite, new Color(0.025f, 0.06f, 0.075f, 0.985f));
+                "Deep Blue Glass", rootRect, panelSprite, new Color(0.012f, 0.075f, 0.15f, 0.985f));
             content.anchorMin = Vector2.zero;
             content.anchorMax = Vector2.one;
             content.offsetMin = new Vector2(12f, 12f);
-            content.offsetMax = new Vector2(-12f, -58f);
+            content.offsetMax = new Vector2(-12f, -12f);
 
-            RectTransform title = CreateUiImage(
-                "Title Band", rootRect, panelSprite, new Color(0.56f, 0.25f, 0.17f, 1f));
-            title.anchorMin = new Vector2(0f, 1f);
-            title.anchorMax = Vector2.one;
-            title.pivot = new Vector2(0.5f, 1f);
-            title.anchoredPosition = new Vector2(0f, -10f);
-            title.sizeDelta = new Vector2(-20f, 48f);
+            RectTransform currentLine = CreateUiPanel(
+                "Current Line", rootRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0f, -18f), new Vector2(690f, 4f),
+                new Color(0.15f, 0.62f, 0.86f, 0.92f));
+            currentLine.pivot = new Vector2(0.5f, 1f);
 
-            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(
-                root, $"{UiPrefabFolder}/P_IdleTogetherPixelFrame.prefab");
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlueModalPrefabPath);
             Object.DestroyImmediate(root);
             return prefab;
         }
 
-        private static GameObject CreateUnderwaterHudCardPrefab()
+        private static GameObject CreateBlueCurrentHudPlatePrefab()
         {
-            Sprite panelSprite = LoadRequiredAsset<Sprite>(IdlePanelSpritePath);
+            Sprite frameSprite = LoadRequiredAsset<Sprite>(BlueFrameSpritePath);
+            Sprite panelSprite = LoadRequiredAsset<Sprite>(BluePanelSpritePath);
             var root = new GameObject(
-                "P_UnderwaterHudCard", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                "P_BlueCurrentHudPlate", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             RectTransform rootRect = root.GetComponent<RectTransform>();
-            rootRect.sizeDelta = new Vector2(360f, 96f);
+            rootRect.sizeDelta = new Vector2(360f, 88f);
             ConfigureSlicedImage(
-                root.GetComponent<Image>(), panelSprite, new Color(0.20f, 0.27f, 0.24f, 0.96f));
+                root.GetComponent<Image>(), frameSprite, new Color(0.06f, 0.35f, 0.60f, 0.96f));
 
             RectTransform inset = CreateUiImage(
-                "Abyss Inset", rootRect, panelSprite, new Color(0.025f, 0.065f, 0.075f, 0.98f));
+                "Pelagic Glass", rootRect, panelSprite, new Color(0.01f, 0.07f, 0.14f, 0.96f));
             inset.anchorMin = Vector2.zero;
             inset.anchorMax = Vector2.one;
             inset.offsetMin = new Vector2(6f, 6f);
             inset.offsetMax = new Vector2(-6f, -6f);
 
             RectTransform accent = CreateUiPanel(
-                "Coral Index", rootRect, new Vector2(0f, 0f), new Vector2(0f, 1f),
-                new Vector2(9f, 0f), new Vector2(5f, -18f), new Color(0.78f, 0.34f, 0.22f, 1f));
+                "Current Index", rootRect, new Vector2(0f, 0f), new Vector2(0f, 1f),
+                new Vector2(9f, 0f), new Vector2(5f, -18f), new Color(0.14f, 0.62f, 0.86f, 1f));
             accent.pivot = new Vector2(0f, 0.5f);
 
-            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, HudCardPrefabPath);
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlueHudPlatePrefabPath);
             Object.DestroyImmediate(root);
             return prefab;
+        }
+
+        private static VolumeProfile CreateDeepOceanVolumeProfile()
+        {
+            VolumeProfile profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(DeepOceanVolumePath);
+            if (profile == null)
+            {
+                profile = ScriptableObject.CreateInstance<VolumeProfile>();
+                AssetDatabase.CreateAsset(profile, DeepOceanVolumePath);
+            }
+
+            ColorAdjustments color = GetOrAddVolumeComponent<ColorAdjustments>(profile);
+            color.postExposure.Override(0.12f);
+            color.contrast.Override(8f);
+            color.colorFilter.Override(new Color(0.84f, 0.96f, 1f, 1f));
+            color.saturation.Override(-6f);
+
+            Bloom bloom = GetOrAddVolumeComponent<Bloom>(profile);
+            bloom.threshold.Override(0.92f);
+            bloom.intensity.Override(0.34f);
+            bloom.scatter.Override(0.62f);
+            bloom.tint.Override(new Color(0.38f, 0.72f, 1f, 1f));
+            bloom.highQualityFiltering.Override(true);
+
+            Vignette vignette = GetOrAddVolumeComponent<Vignette>(profile);
+            vignette.color.Override(new Color(0.002f, 0.025f, 0.075f, 1f));
+            vignette.intensity.Override(0.15f);
+            vignette.smoothness.Override(0.62f);
+            vignette.rounded.Override(false);
+
+            Tonemapping tonemapping = GetOrAddVolumeComponent<Tonemapping>(profile);
+            tonemapping.mode.Override(TonemappingMode.Neutral);
+            profile.Reset();
+            EditorUtility.SetDirty(profile);
+            return profile;
+        }
+
+        private static T GetOrAddVolumeComponent<T>(VolumeProfile profile) where T : VolumeComponent
+        {
+            if (profile.TryGet(out T component)) return component;
+            component = profile.Add<T>(true);
+            AssetDatabase.AddObjectToAsset(component, profile);
+            return component;
         }
 
         private static void CreateScene(
@@ -346,11 +410,13 @@ namespace FlappyBoids.Editor
             GameObject gatePrefab,
             GameObject bubblePrefab,
             GameObject uiFramePrefab,
-            GameObject hudCardPrefab)
+            GameObject hudCardPrefab,
+            VolumeProfile volumeProfile)
         {
             if (File.Exists(ScenePath))
             {
-                UpdateExistingSceneEnvironment(materials, gatePrefab);
+                UpdateExistingSceneEnvironment(
+                    materials, gatePrefab, uiFramePrefab, hudCardPrefab, volumeProfile);
                 return;
             }
 
@@ -426,6 +492,7 @@ namespace FlappyBoids.Editor
             BuildMarchingCubesSea(environment, materials);
             GateWall[] gates = BuildGates(environment, gatePrefab, scene);
             FlappyBoidsHud hud = BuildHud(gameRoot.transform, camera, uiFramePrefab, hudCardPrefab);
+            ApplyUnderwaterLook(gameRoot.transform, camera, volumeProfile);
 
             game.ConfigureScene(swarm, followCamera, audio, hud, gates);
             EditorUtility.SetDirty(game);
@@ -435,7 +502,12 @@ namespace FlappyBoids.Editor
             Selection.activeGameObject = gameRoot;
         }
 
-        private static void UpdateExistingSceneEnvironment(Materials materials, GameObject gatePrefab)
+        private static void UpdateExistingSceneEnvironment(
+            Materials materials,
+            GameObject gatePrefab,
+            GameObject uiFramePrefab,
+            GameObject hudCardPrefab,
+            VolumeProfile volumeProfile)
         {
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             FlappyBoidsGame game = Object.FindAnyObjectByType<FlappyBoidsGame>(FindObjectsInactive.Include);
@@ -453,10 +525,15 @@ namespace FlappyBoids.Editor
             BoidSwarm swarm = game.GetComponentInChildren<BoidSwarm>(true);
             FlappyBoidsCamera followCamera = game.GetComponentInChildren<FlappyBoidsCamera>(true);
             FlappyBoidsAudio audio = game.GetComponentInChildren<FlappyBoidsAudio>(true);
-            FlappyBoidsHud hud = game.GetComponentInChildren<FlappyBoidsHud>(true);
-            if (swarm == null || followCamera == null || audio == null || hud == null)
+            Camera camera = followCamera != null ? followCamera.GetComponent<Camera>() : null;
+            if (swarm == null || followCamera == null || audio == null || camera == null)
                 throw new InvalidDataException(
-                    "The existing scene is missing a gameplay component. UI was left untouched; repair the scene references before rebuilding.");
+                    "The existing scene is missing a gameplay component and cannot be rebuilt safely.");
+
+            Transform existingUi = game.transform.Find("05_UI");
+            if (existingUi != null) Object.DestroyImmediate(existingUi.gameObject);
+            FlappyBoidsHud hud = BuildHud(game.transform, camera, uiFramePrefab, hudCardPrefab);
+            ApplyUnderwaterLook(game.transform, camera, volumeProfile);
 
             game.ConfigureScene(swarm, followCamera, audio, hud, gates);
             EditorUtility.SetDirty(game);
@@ -535,13 +612,13 @@ namespace FlappyBoids.Editor
 
             Font font = LoadRequiredAsset<Font>(IdleBodyFontPath);
             Font headingFont = LoadRequiredAsset<Font>(IdleHeadingFontPath);
-            Sprite panelSprite = LoadRequiredAsset<Sprite>(IdlePanelSpritePath);
-            Color abyss = new Color(0.025f, 0.06f, 0.075f, 0.96f);
-            Color shell = new Color(0.94f, 0.90f, 0.78f, 1f);
-            Color kelp = new Color(0.58f, 0.66f, 0.57f, 1f);
-            Color coral = new Color(0.84f, 0.38f, 0.25f, 1f);
-            Color sand = new Color(0.84f, 0.67f, 0.34f, 1f);
-            Color healthy = new Color(0.40f, 0.61f, 0.42f, 1f);
+            Sprite panelSprite = LoadRequiredAsset<Sprite>(BluePanelSpritePath);
+            Color abyss = new Color(0.005f, 0.035f, 0.09f, 0.96f);
+            Color deepBlue = new Color(0.012f, 0.09f, 0.18f, 0.97f);
+            Color pelagicBlue = new Color(0.055f, 0.34f, 0.58f, 1f);
+            Color currentBlue = new Color(0.14f, 0.62f, 0.86f, 1f);
+            Color mutedBlue = new Color(0.43f, 0.69f, 0.82f, 1f);
+            Color iceBlue = new Color(0.80f, 0.94f, 1f, 1f);
 
             RectTransform safeArea = CreateUiRect(
                 "Safe Area", canvasObject.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -551,7 +628,7 @@ namespace FlappyBoids.Editor
 
             RectTransform topRail = CreateUiRect(
                 "Top HUD Rail", gameplayLayer, new Vector2(0f, 1f), new Vector2(1f, 1f),
-                new Vector2(0f, -28f), new Vector2(-64f, 104f));
+                new Vector2(0f, -24f), new Vector2(-56f, 92f));
             topRail.pivot = new Vector2(0.5f, 1f);
             var topLayout = topRail.gameObject.AddComponent<HorizontalLayoutGroup>();
             topLayout.spacing = 16f;
@@ -562,87 +639,101 @@ namespace FlappyBoids.Editor
             topLayout.childForceExpandHeight = true;
 
             RectTransform schoolCard = InstantiateHudCard(
-                cardPrefab, topRail, "School Status Card", 280f, 0f);
-            CreateUiText("Label", schoolCard, "SCHOOL", font, 15, kelp,
-                TextAnchor.MiddleCenter, new Vector2(0f, 23f), new Vector2(260f, 24f), FontStyle.Bold);
+                cardPrefab, topRail, "School Status Plate", 270f, 0f);
+            CreateUiText("Label", schoolCard, "SCHOOL", font, 14, mutedBlue,
+                TextAnchor.MiddleCenter, new Vector2(0f, 21f), new Vector2(246f, 22f), FontStyle.Bold);
             Text schoolCount = CreateUiText(
                 "Count", schoolCard, $"{BoidSwarm.StartingBoids:00} / {BoidSwarm.StartingBoids}",
-                headingFont, 31, shell, TextAnchor.MiddleCenter,
-                new Vector2(0f, -12f), new Vector2(260f, 44f), FontStyle.Bold);
+                headingFont, 29, iceBlue, TextAnchor.MiddleCenter,
+                new Vector2(0f, -12f), new Vector2(246f, 42f), FontStyle.Bold);
 
             RectTransform gatesCard = InstantiateHudCard(
-                cardPrefab, topRail, "Gate Progress Card", 240f, 0f);
-            CreateUiText("Label", gatesCard, "GATES PASSED", font, 15, kelp,
-                TextAnchor.MiddleCenter, new Vector2(0f, 23f), new Vector2(260f, 24f), FontStyle.Bold);
+                cardPrefab, topRail, "Gate Progress Plate", 220f, 0f);
+            CreateUiText("Label", gatesCard, "GATES", font, 14, mutedBlue,
+                TextAnchor.MiddleCenter, new Vector2(0f, 21f), new Vector2(196f, 22f), FontStyle.Bold);
             Text gatesCount = CreateUiText(
-                "Count", gatesCard, "00", headingFont, 31, shell,
-                TextAnchor.MiddleCenter, new Vector2(0f, -12f), new Vector2(260f, 44f), FontStyle.Bold);
+                "Count", gatesCard, "00", headingFont, 29, iceBlue,
+                TextAnchor.MiddleCenter, new Vector2(0f, -12f), new Vector2(196f, 42f), FontStyle.Bold);
 
             RectTransform passageCard = InstantiateHudCard(
-                cardPrefab, topRail, "Passage Status Card", 560f, 0f);
-            CreateUiText("Next Label", passageCard, "NEXT", font, 13, kelp,
-                TextAnchor.MiddleCenter, new Vector2(-176f, 26f), new Vector2(96f, 22f), FontStyle.Bold);
-            Text nextDistance = CreateUiText("Next Distance", passageCard, "18 m", headingFont, 21, shell,
-                TextAnchor.MiddleCenter, new Vector2(-176f, 0f), new Vector2(110f, 32f), FontStyle.Bold);
-            CreateUiText("Aperture Label", passageCard, "APERTURE", font, 13, kelp,
-                TextAnchor.MiddleCenter, new Vector2(-34f, 26f), new Vector2(126f, 22f), FontStyle.Bold);
-            Text aperture = CreateUiText("Aperture", passageCard, "6.1 m", headingFont, 21, shell,
-                TextAnchor.MiddleCenter, new Vector2(-34f, 0f), new Vector2(126f, 32f), FontStyle.Bold);
-            CreateUiText("Fit Label", passageCard, "SCHOOL FIT", font, 13, kelp,
-                TextAnchor.MiddleCenter, new Vector2(156f, 26f), new Vector2(132f, 22f), FontStyle.Bold);
-            Text fitPercent = CreateUiText("Fit Percent", passageCard, "100%", headingFont, 21, shell,
-                TextAnchor.MiddleCenter, new Vector2(156f, 0f), new Vector2(112f, 32f), FontStyle.Bold);
+                cardPrefab, topRail, "Passage Telemetry Plate", 610f, 0f);
+            CreateUiText("Next Label", passageCard, "NEXT", font, 12, mutedBlue,
+                TextAnchor.MiddleCenter, new Vector2(-205f, 22f), new Vector2(104f, 20f), FontStyle.Bold);
+            Text nextDistance = CreateUiText("Next Distance", passageCard, "18 m", headingFont, 20, iceBlue,
+                TextAnchor.MiddleCenter, new Vector2(-205f, -5f), new Vector2(112f, 30f), FontStyle.Bold);
+            CreateUiText("Aperture Label", passageCard, "OPENING", font, 12, mutedBlue,
+                TextAnchor.MiddleCenter, new Vector2(-58f, 22f), new Vector2(126f, 20f), FontStyle.Bold);
+            Text aperture = CreateUiText("Aperture", passageCard, "6.1 m", headingFont, 20, iceBlue,
+                TextAnchor.MiddleCenter, new Vector2(-58f, -5f), new Vector2(126f, 30f), FontStyle.Bold);
+            CreateUiText("Fit Label", passageCard, "SCHOOL FIT", font, 12, mutedBlue,
+                TextAnchor.MiddleCenter, new Vector2(150f, 22f), new Vector2(132f, 20f), FontStyle.Bold);
+            Text fitPercent = CreateUiText("Fit Percent", passageCard, "100%", headingFont, 20, iceBlue,
+                TextAnchor.MiddleCenter, new Vector2(150f, -5f), new Vector2(112f, 30f), FontStyle.Bold);
             RectTransform fitBackground = CreateUiPanel(
                 "School Fit Bar", passageCard, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -34f), new Vector2(500f, 10f), new Color(0.008f, 0.02f, 0.025f, 1f));
+                new Vector2(150f, -29f), new Vector2(150f, 7f), abyss);
             RectTransform fillRect = CreateUiPanel(
                 "Fill", fitBackground, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f),
-                Vector2.zero, new Vector2(-4f, 6f), healthy);
+                Vector2.zero, new Vector2(-4f, 3f), currentBlue);
             Image fitFill = fillRect.GetComponent<Image>();
             fitFill.type = Image.Type.Filled;
             fitFill.fillMethod = Image.FillMethod.Horizontal;
             fitFill.fillOrigin = 0;
             fitFill.fillAmount = 1f;
 
-            RectTransform controls = CreateUiPanel(
-                "Control Hint", gameplayLayer, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 42f), new Vector2(720f, 42f), new Color(0.025f, 0.06f, 0.075f, 0.82f), panelSprite);
-            CreateUiText("Hint", controls, "LEFT / RIGHT  STEER     SPACE  KICK + TIGHTEN SCHOOL",
-                font, 15, kelp, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(680f, 28f), FontStyle.Bold);
-
+            RectTransform readyLayer = CreateUiRect(
+                "Ready Layer", safeArea, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            CreateUiPanel(
+                "Abyss Screen Wash", readyLayer, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero, new Color(0.002f, 0.025f, 0.07f, 0.52f));
             RectTransform readyPanel = InstantiateUiFrame(
-                modalPrefab, safeArea, "Ready Panel - Deep Current", new Vector2(700f, 390f));
-            CreateUiText("Eyebrow", readyPanel, "FLAPPY BOIDS  //  DEEP CURRENT", font, 15,
-                shell, TextAnchor.MiddleCenter, new Vector2(0f, 160f), new Vector2(640f, 28f), FontStyle.Bold);
-            CreateUiText("Title", readyPanel, "KEEP THE SCHOOL TOGETHER", headingFont, 38,
-                shell, TextAnchor.MiddleCenter, new Vector2(0f, 96f), new Vector2(640f, 58f), FontStyle.Bold);
-            CreateUiText("Brief", readyPanel,
-                "The current brings an endless reef toward you.\nGuide every fish through the shrinking opening.",
-                font, 18, shell, TextAnchor.MiddleCenter, new Vector2(0f, 30f), new Vector2(600f, 68f));
-            CreateUiText("Controls", readyPanel,
-                "ARROWS  STEER        SPACE  KICK + FORM UP", font, 18, coral,
-                TextAnchor.MiddleCenter, new Vector2(0f, -58f), new Vector2(580f, 36f), FontStyle.Bold);
-            CreateUiText("Launch", readyPanel, "PRESS SPACE TO ENTER THE CURRENT", font, 16, sand,
-                TextAnchor.MiddleCenter, new Vector2(0f, -126f), new Vector2(520f, 30f), FontStyle.Bold);
+                modalPrefab, readyLayer, "Start Card", new Vector2(860f, 500f));
+            CreateUiText("Title", readyPanel, "FLAPPY BOIDS", headingFont, 62,
+                iceBlue, TextAnchor.MiddleCenter, new Vector2(0f, 142f), new Vector2(760f, 82f), FontStyle.Bold);
+            CreateUiPanel(
+                "Title Divider", readyPanel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 86f), new Vector2(540f, 3f), pelagicBlue);
 
+            RectTransform steerControl = CreateUiPanel(
+                "Steer Control", readyPanel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 28f), new Vector2(650f, 58f), deepBlue, panelSprite);
+            CreateUiText("Key", steerControl, "LEFT / RIGHT", headingFont, 21, currentBlue,
+                TextAnchor.MiddleCenter, new Vector2(-190f, 0f), new Vector2(230f, 34f), FontStyle.Bold);
+            CreateUiText("Action", steerControl, "STEER THE SCHOOL", font, 18, iceBlue,
+                TextAnchor.MiddleLeft, new Vector2(135f, 0f), new Vector2(330f, 34f), FontStyle.Bold);
+
+            RectTransform kickControl = CreateUiPanel(
+                "Kick Control", readyPanel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -48f), new Vector2(650f, 58f), deepBlue, panelSprite);
+            CreateUiText("Key", kickControl, "SPACE", headingFont, 21, currentBlue,
+                TextAnchor.MiddleCenter, new Vector2(-190f, 0f), new Vector2(230f, 34f), FontStyle.Bold);
+            CreateUiText("Action", kickControl, "KICK UP + FORM TIGHT", font, 18, iceBlue,
+                TextAnchor.MiddleLeft, new Vector2(135f, 0f), new Vector2(330f, 34f), FontStyle.Bold);
+
+            CreateUiText("Launch", readyPanel, "PRESS ANY BUTTON", font, 22, currentBlue,
+                TextAnchor.MiddleCenter, new Vector2(0f, -158f), new Vector2(560f, 38f), FontStyle.Bold);
+
+            RectTransform resultLayer = CreateUiRect(
+                "Result Layer", safeArea, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            CreateUiPanel(
+                "Abyss Screen Wash", resultLayer, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero, new Color(0.002f, 0.025f, 0.07f, 0.62f));
             RectTransform resultPanel = InstantiateUiFrame(
-                modalPrefab, safeArea, "Result Panel - Deep Current", new Vector2(700f, 390f));
-            CreateUiText("Eyebrow", resultPanel, "EXPEDITION REPORT", font, 15,
-                shell, TextAnchor.MiddleCenter, new Vector2(0f, 160f), new Vector2(640f, 28f), FontStyle.Bold);
-            Text resultTitle = CreateUiText("Title", resultPanel, "RUN ENDED", headingFont, 40,
-                coral, TextAnchor.MiddleCenter, new Vector2(0f, 94f), new Vector2(640f, 60f), FontStyle.Bold);
-            Text resultStats = CreateUiText("Run Stats", resultPanel, "GATES  00     FINAL SCHOOL  00", font, 20,
-                shell, TextAnchor.MiddleCenter, new Vector2(0f, 28f), new Vector2(600f, 40f), FontStyle.Bold);
+                modalPrefab, resultLayer, "Result Card", new Vector2(820f, 410f));
+            Text resultTitle = CreateUiText("Title", resultPanel, "RUN OVER", headingFont, 48,
+                currentBlue, TextAnchor.MiddleCenter, new Vector2(0f, 108f), new Vector2(700f, 68f), FontStyle.Bold);
+            Text resultStats = CreateUiText("Run Stats", resultPanel, "GATES  00     FINAL SCHOOL  00", font, 21,
+                iceBlue, TextAnchor.MiddleCenter, new Vector2(0f, 30f), new Vector2(650f, 42f), FontStyle.Bold);
             Text resultBest = CreateUiText("Best", resultPanel, "BEST  00 gates / 00 fish", font, 18,
-                kelp, TextAnchor.MiddleCenter, new Vector2(0f, -36f), new Vector2(580f, 62f));
-            CreateUiText("Restart", resultPanel, "SPACE or R  //  RETURN TO THE CURRENT", font, 17,
-                sand, TextAnchor.MiddleCenter, new Vector2(0f, -126f), new Vector2(560f, 34f), FontStyle.Bold);
-            resultPanel.gameObject.SetActive(false);
+                mutedBlue, TextAnchor.MiddleCenter, new Vector2(0f, -32f), new Vector2(620f, 64f));
+            CreateUiText("Restart", resultPanel, "SPACE / R  TO DIVE AGAIN", font, 18,
+                currentBlue, TextAnchor.MiddleCenter, new Vector2(0f, -128f), new Vector2(580f, 34f), FontStyle.Bold);
+            resultLayer.gameObject.SetActive(false);
 
             hud.ConfigureView(
                 schoolCount, gatesCount, nextDistance, aperture, fitPercent, fitFill,
                 gameplayLayer.gameObject,
-                readyPanel.gameObject, resultPanel.gameObject,
+                readyLayer.gameObject, resultLayer.gameObject,
                 resultTitle, resultStats, resultBest);
             gameplayLayer.gameObject.SetActive(false);
             EditorUtility.SetDirty(hud);
@@ -674,13 +765,13 @@ namespace FlappyBoids.Editor
             GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
             instance.name = name;
             RectTransform rect = instance.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(preferredWidth, 96f);
+            rect.sizeDelta = new Vector2(preferredWidth, 88f);
             LayoutElement layout = instance.AddComponent<LayoutElement>();
             layout.minWidth = Mathf.Min(260f, preferredWidth);
             layout.preferredWidth = preferredWidth;
             layout.flexibleWidth = flexibleWidth;
-            layout.minHeight = 96f;
-            layout.preferredHeight = 96f;
+            layout.minHeight = 88f;
+            layout.preferredHeight = 88f;
             return rect;
         }
 
@@ -778,19 +869,73 @@ namespace FlappyBoids.Editor
             return text;
         }
 
+        private static void ApplyUnderwaterLook(
+            Transform gameRoot, Camera camera, VolumeProfile volumeProfile)
+        {
+            ApplyRenderSettings();
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = new Color(0.006f, 0.06f, 0.14f, 1f);
+            camera.farClipPlane = 240f;
+            UniversalAdditionalCameraData cameraData =
+                camera.GetComponent<UniversalAdditionalCameraData>();
+            if (cameraData == null) cameraData = camera.gameObject.AddComponent<UniversalAdditionalCameraData>();
+            cameraData.renderPostProcessing = true;
+            cameraData.antialiasing = AntialiasingMode.FastApproximateAntialiasing;
+
+            Transform lighting = gameRoot.Find("03_Lighting");
+            if (lighting == null) lighting = Group("03_Lighting", gameRoot);
+            Transform oldVolume = lighting.Find("Deep Ocean Global Volume");
+            if (oldVolume != null) Object.DestroyImmediate(oldVolume.gameObject);
+
+            var volumeObject = new GameObject("Deep Ocean Global Volume");
+            volumeObject.transform.SetParent(lighting, false);
+            Volume volume = volumeObject.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 20f;
+            volume.weight = 1f;
+            volume.sharedProfile = volumeProfile;
+
+            Light courseLight = lighting.Find("Course Light")?.GetComponent<Light>();
+            if (courseLight != null)
+            {
+                courseLight.color = new Color(0.43f, 0.72f, 1f, 1f);
+                courseLight.intensity = 1.34f;
+                courseLight.shadows = LightShadows.Soft;
+                RenderSettings.sun = courseLight;
+                EditorUtility.SetDirty(courseLight);
+            }
+
+            Light schoolLight = camera.transform.Find("School Dive Light")?.GetComponent<Light>();
+            if (schoolLight != null)
+            {
+                schoolLight.color = new Color(0.25f, 0.65f, 1f, 1f);
+                schoolLight.intensity = 23f;
+                schoolLight.range = 24f;
+                schoolLight.spotAngle = 62f;
+                schoolLight.innerSpotAngle = 40f;
+                EditorUtility.SetDirty(schoolLight);
+            }
+
+            EditorUtility.SetDirty(camera);
+            EditorUtility.SetDirty(cameraData);
+            EditorUtility.SetDirty(volume);
+        }
+
         private static void ApplyRenderSettings()
         {
             RenderSettings.skybox = null;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.018f, 0.11f, 0.12f);
-            RenderSettings.fogStartDistance = 48f;
-            RenderSettings.fogEndDistance = 205f;
+            RenderSettings.fogColor = new Color(0.018f, 0.16f, 0.30f);
+            RenderSettings.fogStartDistance = 7f;
+            RenderSettings.fogEndDistance = 112f;
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.12f, 0.34f, 0.31f);
-            RenderSettings.ambientEquatorColor = new Color(0.07f, 0.20f, 0.18f);
-            RenderSettings.ambientGroundColor = new Color(0.04f, 0.09f, 0.07f);
-            RenderSettings.ambientIntensity = 1.15f;
+            RenderSettings.ambientSkyColor = new Color(0.16f, 0.45f, 0.72f);
+            RenderSettings.ambientEquatorColor = new Color(0.08f, 0.28f, 0.48f);
+            RenderSettings.ambientGroundColor = new Color(0.025f, 0.11f, 0.23f);
+            RenderSettings.ambientIntensity = 1.34f;
+            RenderSettings.reflectionIntensity = 0.74f;
+            RenderSettings.subtractiveShadowColor = new Color(0.005f, 0.025f, 0.07f);
         }
 
         private static GameObject InstantiatePrefab(

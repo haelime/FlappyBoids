@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Utilities;
 
 namespace FlappyBoids
 {
@@ -43,6 +44,8 @@ namespace FlappyBoids
         private bool _built;
         private bool _hasHudSignature;
         private HudSignature _lastHudSignature;
+        private IDisposable _anyButtonListener;
+        private bool _anyButtonPressed;
 
         public event Action HudStateChanged;
 
@@ -80,6 +83,18 @@ namespace FlappyBoids
         {
             // Scene-owned initialization also works when this scene is loaded after application startup.
             Build();
+        }
+
+        private void OnEnable()
+        {
+            _anyButtonListener = InputSystem.onAnyButtonPress.Call(_ => _anyButtonPressed = true);
+        }
+
+        private void OnDisable()
+        {
+            _anyButtonListener?.Dispose();
+            _anyButtonListener = null;
+            _anyButtonPressed = false;
         }
 
         public void Build()
@@ -129,6 +144,8 @@ namespace FlappyBoids
         {
             if (!_built || _swarm == null) return;
             UpdateGuidance();
+            bool startPressed = _anyButtonPressed;
+            _anyButtonPressed = false;
             Keyboard keyboard = Keyboard.current;
             float horizontal = 0f;
             bool flap = false;
@@ -144,7 +161,7 @@ namespace FlappyBoids
             if (State == RunState.Ready)
             {
                 _swarm.SetInput(horizontal, false);
-                if (flap) BeginRun(horizontal);
+                if (startPressed) BeginRun(horizontal);
                 PublishHudStateIfChanged();
                 return;
             }

@@ -12,8 +12,13 @@ namespace FlappyBoids.Tests
         private const string AuthoredScenePath = "Assets/FlappyBoids/Scenes/FlappyBoids.unity";
         private const string BubblePrefabPath =
             "Assets/FlappyBoids/ThirdParty/URPUnderwaterEffects/Prefabs/BubblesZone.prefab";
-        private const string HudCardPrefabPath =
-            "Assets/FlappyBoids/Prefabs/UI/P_UnderwaterHudCard.prefab";
+        private const string HudPlatePrefabPath =
+            "Assets/FlappyBoids/Prefabs/UI/P_BlueCurrentHudPlate.prefab";
+        private const string HudModalPrefabPath =
+            "Assets/FlappyBoids/Prefabs/UI/P_BlueCurrentModal.prefab";
+        private const string DeepOceanVolumePath =
+            "Assets/FlappyBoids/Art/Profiles/VP_DeepOcean.asset";
+        private const string GameRuntimePath = "Assets/FlappyBoids/Runtime/FlappyBoidsGame.cs";
         private const string HudRuntimePath = "Assets/FlappyBoids/Runtime/FlappyBoidsHud.cs";
 
         [Test]
@@ -58,22 +63,47 @@ namespace FlappyBoids.Tests
         }
 
         [Test]
-        public void AuthoredHud_UsesSafeAreaAndReusableCards()
+        public void AuthoredHud_UsesSafeAreaAndReusableBlueCurrentPrefabs()
         {
             string sceneYaml = File.ReadAllText(AuthoredScenePath);
-            string cardGuid = AssetDatabase.AssetPathToGUID(HudCardPrefabPath);
+            string plateGuid = AssetDatabase.AssetPathToGUID(HudPlatePrefabPath);
+            string modalGuid = AssetDatabase.AssetPathToGUID(HudModalPrefabPath);
 
-            Assert.That(cardGuid, Is.Not.Empty, "The reusable underwater HUD card prefab is missing.");
+            Assert.That(plateGuid, Is.Not.Empty, "The reusable blue HUD plate prefab is missing.");
+            Assert.That(modalGuid, Is.Not.Empty, "The reusable blue modal prefab is missing.");
             Assert.That(sceneYaml, Does.Contain("m_Name: Safe Area"));
             Assert.That(sceneYaml, Does.Contain("m_Name: Gameplay Layer"));
             Assert.That(sceneYaml, Does.Contain("m_Name: Top HUD Rail"));
-            Assert.That(sceneYaml, Does.Contain("School Status Card"));
-            Assert.That(sceneYaml, Does.Contain("Gate Progress Card"));
-            Assert.That(sceneYaml, Does.Contain("Passage Status Card"));
+            Assert.That(sceneYaml, Does.Contain("School Status Plate"));
+            Assert.That(sceneYaml, Does.Contain("Gate Progress Plate"));
+            Assert.That(sceneYaml, Does.Contain("Passage Telemetry Plate"));
+            Assert.That(sceneYaml, Does.Contain("m_Name: Ready Layer"));
+            Assert.That(sceneYaml, Does.Contain("m_Text: PRESS ANY BUTTON"));
             Assert.That(Regex.Matches(
                 sceneYaml,
-                $@"m_SourcePrefab: \{{fileID: 100100000, guid: {cardGuid}, type: 3\}}").Count,
+                $@"m_SourcePrefab: \{{fileID: 100100000, guid: {plateGuid}, type: 3\}}").Count,
                 Is.EqualTo(3));
+            Assert.That(Regex.Matches(
+                sceneYaml,
+                $@"m_SourcePrefab: \{{fileID: 100100000, guid: {modalGuid}, type: 3\}}").Count,
+                Is.EqualTo(2));
+            Assert.That(AssetDatabase.LoadMainAssetAtPath(
+                "Assets/FlappyBoids/Prefabs/UI/P_IdleTogetherPixelFrame.prefab"), Is.Null);
+            Assert.That(AssetDatabase.LoadMainAssetAtPath(
+                "Assets/FlappyBoids/Prefabs/UI/P_UnderwaterHudCard.prefab"), Is.Null);
+        }
+
+        [Test]
+        public void AuthoredScene_ContainsDeepOceanPostProcessingAndLighting()
+        {
+            string sceneYaml = File.ReadAllText(AuthoredScenePath);
+            string profileGuid = AssetDatabase.AssetPathToGUID(DeepOceanVolumePath);
+
+            Assert.That(profileGuid, Is.Not.Empty, "The deep-ocean Volume Profile is missing.");
+            Assert.That(sceneYaml, Does.Contain("m_Name: Deep Ocean Global Volume"));
+            Assert.That(sceneYaml, Does.Contain(profileGuid));
+            Assert.That(sceneYaml, Does.Contain("m_Name: Course Light"));
+            Assert.That(sceneYaml, Does.Contain("m_Name: School Dive Light"));
         }
 
         [Test]
@@ -86,6 +116,15 @@ namespace FlappyBoids.Tests
             Assert.That(source, Does.Not.Match(@"\bAddComponent\s*<"));
             Assert.That(source, Does.Not.Contain("private void LateUpdate()"),
                 "The HUD should react to game-state events instead of polling every frame.");
+        }
+
+        [Test]
+        public void ReadyState_StartsFromInputSystemsAnyButtonStream()
+        {
+            string source = File.ReadAllText(GameRuntimePath);
+
+            Assert.That(source, Does.Contain("InputSystem.onAnyButtonPress.Call"));
+            Assert.That(source, Does.Contain("if (startPressed) BeginRun(horizontal);"));
         }
 
         [Test]

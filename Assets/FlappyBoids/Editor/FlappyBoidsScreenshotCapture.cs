@@ -10,12 +10,14 @@ namespace FlappyBoids.Editor
     {
         private const int CaptureWidth = 1920;
         private const int CaptureHeight = 1080;
-        private const string DefaultFileName = "FlappyBoids_AbyssAmber_Gameplay.png";
+        private const string DefaultFileName = "FlappyBoids_BlueCurrent_Gameplay.png";
 
         [MenuItem("Tools/Flappy Boids/Capture Staged Gameplay Screenshot")]
         public static void CaptureStagedGameplay()
         {
-            FlappyBoidsSceneBuilder.BuildAll();
+            FlappyBoidsSceneBuilder.RebuildAuthoredHud();
+            int captureWidth = ResolvePositiveIntArgument("-flappyScreenshotWidth", CaptureWidth);
+            int captureHeight = ResolvePositiveIntArgument("-flappyScreenshotHeight", CaptureHeight);
 
             Camera camera = GameObject.Find("TPS Flock Camera")?.GetComponent<Camera>();
             Canvas canvas = GameObject.Find("Gameplay HUD Canvas")?.GetComponent<Canvas>();
@@ -36,7 +38,7 @@ namespace FlappyBoids.Editor
                 StageBubbles();
 
                 renderTexture = new RenderTexture(
-                    CaptureWidth, CaptureHeight, 24, RenderTextureFormat.ARGB32)
+                    captureWidth, captureHeight, 24, RenderTextureFormat.ARGB32)
                 {
                     antiAliasing = 4,
                     name = "FlappyBoids Gameplay Capture"
@@ -48,8 +50,8 @@ namespace FlappyBoids.Editor
                 camera.Render();
 
                 RenderTexture.active = renderTexture;
-                screenshot = new Texture2D(CaptureWidth, CaptureHeight, TextureFormat.RGB24, false);
-                screenshot.ReadPixels(new Rect(0f, 0f, CaptureWidth, CaptureHeight), 0, 0);
+                screenshot = new Texture2D(captureWidth, captureHeight, TextureFormat.RGB24, false);
+                screenshot.ReadPixels(new Rect(0f, 0f, captureWidth, captureHeight), 0, 0);
                 screenshot.Apply(false, false);
 
                 string outputPath = ResolveOutputPath();
@@ -74,20 +76,20 @@ namespace FlappyBoids.Editor
         private static void StageHud(Transform canvas, bool showReadyScreen)
         {
             SetActive(canvas, "Safe Area/Gameplay Layer", !showReadyScreen);
-            SetActive(canvas, "Safe Area/Ready Panel - Deep Current", showReadyScreen);
-            SetActive(canvas, "Safe Area/Result Panel - Deep Current", false);
-            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/School Status Card/Count", "31 / 42");
-            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Gate Progress Card/Count", "05");
-            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Status Card/Next Distance", "8 m");
-            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Status Card/Aperture", "5.7 m");
-            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Status Card/Fit Percent", "86%");
+            SetActive(canvas, "Safe Area/Ready Layer", showReadyScreen);
+            SetActive(canvas, "Safe Area/Result Layer", false);
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/School Status Plate/Count", "31 / 42");
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Gate Progress Plate/Count", "05");
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Telemetry Plate/Next Distance", "8 m");
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Telemetry Plate/Aperture", "5.7 m");
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Telemetry Plate/Fit Percent", "86%");
 
             Transform fill = canvas.Find(
-                "Safe Area/Gameplay Layer/Top HUD Rail/Passage Status Card/School Fit Bar/Fill");
+                "Safe Area/Gameplay Layer/Top HUD Rail/Passage Telemetry Plate/School Fit Bar/Fill");
             if (fill != null && fill.TryGetComponent(out Image image))
             {
                 image.fillAmount = 0.86f;
-                image.color = new Color(0.36f, 0.66f, 0.43f, 1f);
+                image.color = new Color(0.22f, 0.72f, 0.96f, 1f);
             }
         }
 
@@ -177,5 +179,15 @@ namespace FlappyBoids.Editor
         private static bool HasArgument(string expected) =>
             Array.Exists(Environment.GetCommandLineArgs(),
                 argument => string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
+
+        private static int ResolvePositiveIntArgument(string name, int fallback)
+        {
+            string[] arguments = Environment.GetCommandLineArgs();
+            for (int i = 0; i < arguments.Length - 1; i++)
+                if (string.Equals(arguments[i], name, StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(arguments[i + 1], out int value) && value > 0)
+                    return value;
+            return fallback;
+        }
     }
 }
