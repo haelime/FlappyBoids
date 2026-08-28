@@ -30,7 +30,7 @@ namespace FlappyBoids.Editor
 
             try
             {
-                StageHud(canvas.transform);
+                StageHud(canvas.transform, HasArgument("-flappyScreenshotReady"));
                 previewRoot = StageSchool();
                 StageCamera(camera);
                 StageBubbles();
@@ -71,15 +71,19 @@ namespace FlappyBoids.Editor
             }
         }
 
-        private static void StageHud(Transform canvas)
+        private static void StageHud(Transform canvas, bool showReadyScreen)
         {
-            SetActive(canvas, "Ready Panel - Infinite Course v3", false);
-            SetActive(canvas, "Result Panel - Infinite Course v3", false);
-            SetText(canvas, "School Counter/Value", "31 / 42");
-            SetText(canvas, "Pipe Counter/Value", "05");
-            SetText(canvas, "Route Guidance/Next Pipe + Flock Fit", "NEXT  8m    HOLE  5.7m    FIT  86%");
+            SetActive(canvas, "Safe Area/Gameplay Layer", !showReadyScreen);
+            SetActive(canvas, "Safe Area/Ready Panel - Deep Current", showReadyScreen);
+            SetActive(canvas, "Safe Area/Result Panel - Deep Current", false);
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/School Status Card/Count", "31 / 42");
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Gate Progress Card/Count", "05");
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Status Card/Next Distance", "8 m");
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Status Card/Aperture", "5.7 m");
+            SetText(canvas, "Safe Area/Gameplay Layer/Top HUD Rail/Passage Status Card/Fit Percent", "86%");
 
-            Transform fill = canvas.Find("Route Guidance/Flock Fit Bar/Fill");
+            Transform fill = canvas.Find(
+                "Safe Area/Gameplay Layer/Top HUD Rail/Passage Status Card/School Fit Bar/Fill");
             if (fill != null && fill.TryGetComponent(out Image image))
             {
                 image.fillAmount = 0.86f;
@@ -169,5 +173,9 @@ namespace FlappyBoids.Editor
             string projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? Application.dataPath;
             return Path.Combine(projectRoot, "Screenshots", DefaultFileName);
         }
+
+        private static bool HasArgument(string expected) =>
+            Array.Exists(Environment.GetCommandLineArgs(),
+                argument => string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase));
     }
 }

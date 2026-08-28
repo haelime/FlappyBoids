@@ -12,6 +12,9 @@ namespace FlappyBoids.Tests
         private const string AuthoredScenePath = "Assets/FlappyBoids/Scenes/FlappyBoids.unity";
         private const string BubblePrefabPath =
             "Assets/FlappyBoids/ThirdParty/URPUnderwaterEffects/Prefabs/BubblesZone.prefab";
+        private const string HudCardPrefabPath =
+            "Assets/FlappyBoids/Prefabs/UI/P_UnderwaterHudCard.prefab";
+        private const string HudRuntimePath = "Assets/FlappyBoids/Runtime/FlappyBoidsHud.cs";
 
         [Test]
         public void AuthoredScene_AllPrefabSourceGuidsResolve()
@@ -52,6 +55,50 @@ namespace FlappyBoids.Tests
             Assert.That(sceneYaml, Does.Contain("02_Marching Cubes Rock Gates"));
             Assert.That(sceneYaml, Does.Not.Contain("01_Corridor"));
             Assert.That(sceneYaml, Does.Not.Contain("03_Decorations"));
+        }
+
+        [Test]
+        public void AuthoredHud_UsesSafeAreaAndReusableCards()
+        {
+            string sceneYaml = File.ReadAllText(AuthoredScenePath);
+            string cardGuid = AssetDatabase.AssetPathToGUID(HudCardPrefabPath);
+
+            Assert.That(cardGuid, Is.Not.Empty, "The reusable underwater HUD card prefab is missing.");
+            Assert.That(sceneYaml, Does.Contain("m_Name: Safe Area"));
+            Assert.That(sceneYaml, Does.Contain("m_Name: Gameplay Layer"));
+            Assert.That(sceneYaml, Does.Contain("m_Name: Top HUD Rail"));
+            Assert.That(sceneYaml, Does.Contain("School Status Card"));
+            Assert.That(sceneYaml, Does.Contain("Gate Progress Card"));
+            Assert.That(sceneYaml, Does.Contain("Passage Status Card"));
+            Assert.That(Regex.Matches(
+                sceneYaml,
+                $@"m_SourcePrefab: \{{fileID: 100100000, guid: {cardGuid}, type: 3\}}").Count,
+                Is.EqualTo(3));
+        }
+
+        [Test]
+        public void HudRuntime_HasNoHiddenVisualConstructionFallback()
+        {
+            string source = File.ReadAllText(HudRuntimePath);
+
+            Assert.That(source, Does.Not.Match(@"new\s+GameObject\s*\("));
+            Assert.That(source, Does.Not.Match(@"\bInstantiate\s*\("));
+            Assert.That(source, Does.Not.Match(@"\bAddComponent\s*<"));
+            Assert.That(source, Does.Not.Contain("private void LateUpdate()"),
+                "The HUD should react to game-state events instead of polling every frame.");
+        }
+
+        [Test]
+        public void SafeArea_ConvertsPixelsToNormalizedAnchors()
+        {
+            FlappyBoidsSafeArea.GetNormalizedAnchors(
+                new Rect(80f, 40f, 1760f, 1000f), new Vector2(1920f, 1080f),
+                out Vector2 minimum, out Vector2 maximum);
+
+            Assert.That(minimum.x, Is.EqualTo(80f / 1920f).Within(0.0001f));
+            Assert.That(minimum.y, Is.EqualTo(40f / 1080f).Within(0.0001f));
+            Assert.That(maximum.x, Is.EqualTo(1840f / 1920f).Within(0.0001f));
+            Assert.That(maximum.y, Is.EqualTo(1040f / 1080f).Within(0.0001f));
         }
 
         [Test]

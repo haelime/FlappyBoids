@@ -41,6 +41,10 @@ namespace FlappyBoids
         private InfiniteSeaTerrain _seaTerrain;
         private int _nextGateSequence;
         private bool _built;
+        private bool _hasHudSignature;
+        private HudSignature _lastHudSignature;
+
+        public event Action HudStateChanged;
 
         public RunState State { get; private set; }
         public int WallsPassed { get; private set; }
@@ -98,10 +102,11 @@ namespace FlappyBoids
             QualitySettings.vSyncCount = 0;
 
             _swarm.Configure(_gates, _courseSpeed);
+            State = RunState.Ready;
             _followCamera.Configure(this);
             _hud.Configure(this);
             UpdateGuidance();
-            State = RunState.Ready;
+            PublishHudStateIfChanged(true);
         }
 
         private void ResolveSceneReferences()
@@ -140,12 +145,14 @@ namespace FlappyBoids
             {
                 _swarm.SetInput(horizontal, false);
                 if (flap) BeginRun(horizontal);
+                PublishHudStateIfChanged();
                 return;
             }
 
             if (State == RunState.GameOver)
             {
                 if (flap || restart) RestartAndLaunch();
+                PublishHudStateIfChanged();
                 return;
             }
 
@@ -159,6 +166,7 @@ namespace FlappyBoids
 
             if (_swarm.AliveCount <= 0)
                 FinishRun(false);
+            PublishHudStateIfChanged();
         }
 
         private void FinishRun(bool won)
@@ -169,6 +177,7 @@ namespace FlappyBoids
             _swarm.Stop();
             NewBest = FlappyBoidsRecord.SaveRun(WallsPassed, _swarm.AliveCount);
             _audio.PlayFinish(won);
+            PublishHudStateIfChanged(true);
         }
 
         public void BeginRun(float horizontalInput = 0f)
@@ -180,6 +189,7 @@ namespace FlappyBoids
             _swarm.Begin();
             _swarm.SetInput(horizontalInput, true);
             _audio.PlayFlap();
+            PublishHudStateIfChanged(true);
         }
 
         private void RestartAndLaunch()
@@ -194,6 +204,7 @@ namespace FlappyBoids
             _swarm.SetInput(0f, true);
             State = RunState.Playing;
             _audio.PlayFlap();
+            PublishHudStateIfChanged(true);
         }
 
         private void RecyclePassedGates()
@@ -351,6 +362,25 @@ namespace FlappyBoids
                 _swarm.SetGuidanceHole(next.HoleCenter, Mathf.Max(0.1f, next.Radius - BoidSwarm.BirdRadius));
         }
 
+        private void PublishHudStateIfChanged(bool force = false)
+        {
+            if (_swarm == null) return;
+            var signature = new HudSignature
+            {
+                Alive = _swarm.AliveCount,
+                Walls = WallsPassed,
+                NextDistanceMeters = Mathf.RoundToInt(NextGateDistance),
+                ApertureTenths = Mathf.RoundToInt(NextHoleDiameter * 10f),
+                FitPercent = Mathf.RoundToInt(_swarm.FormationFit * 100f),
+                State = State,
+                NewBest = NewBest
+            };
+            if (!force && _hasHudSignature && signature.Equals(_lastHudSignature)) return;
+            _hasHudSignature = true;
+            _lastHudSignature = signature;
+            HudStateChanged?.Invoke();
+        }
+
         private void OnDrawGizmosSelected()
         {
             if (_authoredGates == null || _authoredGates.Length == 0) return;
@@ -372,6 +402,23 @@ namespace FlappyBoids
             public GateWall Gate;
             public Vector3 Position;
             public float Diameter;
+        }
+
+        private struct HudSignature : IEquatable<HudSignature>
+        {
+            public int Alive;
+            public int Walls;
+            public int NextDistanceMeters;
+            public int ApertureTenths;
+            public int FitPercent;
+            public RunState State;
+            public bool NewBest;
+
+            public bool Equals(HudSignature other) =>
+                Alive == other.Alive && Walls == other.Walls &&
+                NextDistanceMeters == other.NextDistanceMeters &&
+                ApertureTenths == other.ApertureTenths && FitPercent == other.FitPercent &&
+                State == other.State && NewBest == other.NewBest;
         }
     }
 

@@ -22,6 +22,16 @@ namespace FlappyBoids.Tests
             Assert.That(game.Swarm, Is.Not.Null);
             Assert.That(Object.FindAnyObjectByType<Canvas>(), Is.Not.Null,
                 "The HUD must be a scene-authored Canvas, not runtime-only IMGUI.");
+            FlappyBoidsHud hud = Object.FindAnyObjectByType<FlappyBoidsHud>();
+            Assert.That(hud, Is.Not.Null);
+            Assert.That(hud.HasAuthoredHierarchy, Is.True,
+                "All HUD presentation references must be baked into the authored scene.");
+            Assert.That(Object.FindAnyObjectByType<FlappyBoidsSafeArea>(), Is.Not.Null,
+                "Critical HUD elements must live under an authored safe-area panel.");
+            Transform gameplayLayer = hud.transform.Find("Safe Area/Gameplay Layer");
+            Assert.That(gameplayLayer, Is.Not.Null);
+            Assert.That(gameplayLayer.gameObject.activeSelf, Is.False,
+                "The authored Ready-state hierarchy must match its initial runtime visibility.");
             Assert.That(Object.FindObjectsByType<GateWall>().Length,
                 Is.EqualTo(FlappyBoidsGame.GatePoolSize),
                 "The infinite course should reuse a fixed-size gate pool.");
