@@ -9,63 +9,85 @@ namespace FlappyBoids
         [SerializeField] private AudioSource _effectsSource;
         [SerializeField] private AudioSource _ambientSource;
 
-        private AudioClip _flap;
-        private AudioClip _gate;
-        private AudioClip _hit;
-        private AudioClip _win;
+        [Header("IdleTogether feedback clips")]
+        [SerializeField] private AudioClip _flapClip;
+        [SerializeField] private AudioClip[] _gateClips;
+        [SerializeField] private AudioClip _hitClip;
+        [SerializeField] private AudioClip _finishClip;
+
+        private int _nextGateClip;
+
+        public bool HasAuthoredFeedback =>
+            _effectsSource != null && _ambientSource != null && _underwaterAmbience != null &&
+            _flapClip != null && _hitClip != null && _finishClip != null &&
+            _gateClips != null && _gateClips.Length > 0;
 
         public void ConfigureSceneAudio(
-            AudioClip underwaterAmbience, AudioSource effectsSource, AudioSource ambientSource)
+            AudioClip underwaterAmbience,
+            AudioSource effectsSource,
+            AudioSource ambientSource,
+            AudioClip flapClip,
+            AudioClip[] gateClips,
+            AudioClip hitClip,
+            AudioClip finishClip)
         {
             _underwaterAmbience = underwaterAmbience;
             _effectsSource = effectsSource;
             _ambientSource = ambientSource;
+            _flapClip = flapClip;
+            _gateClips = gateClips;
+            _hitClip = hitClip;
+            _finishClip = finishClip;
         }
 
         private void Awake()
         {
-            if (_effectsSource == null) _effectsSource = gameObject.AddComponent<AudioSource>();
-            if (_ambientSource == null) _ambientSource = gameObject.AddComponent<AudioSource>();
-            _effectsSource.playOnAwake = false;
-            _effectsSource.volume = 0.32f;
-            _flap = Tone("Flap", 430f, 680f, 0.10f);
-            _gate = Tone("Gate", 620f, 900f, 0.12f);
-            _hit = Tone("Hit", 170f, 75f, 0.13f);
-            _win = Tone("Finish", 520f, 1050f, 0.34f);
-
-            if (_underwaterAmbience != null)
+            if (!HasAuthoredFeedback)
             {
-                _ambientSource.clip = _underwaterAmbience;
-                _ambientSource.loop = true;
-                _ambientSource.playOnAwake = true;
-                _ambientSource.spatialBlend = 0f;
-                _ambientSource.volume = 0.16f;
-                _ambientSource.Play();
+                Debug.LogError(
+                    "FlappyBoids audio is incomplete. Rebuild the authored scene to assign AudioSources and clips.",
+                    this);
+                return;
             }
+
+            _effectsSource.playOnAwake = false;
+            _effectsSource.spatialBlend = 0f;
+            _effectsSource.volume = 0.46f;
+            _ambientSource.clip = _underwaterAmbience;
+            _ambientSource.loop = true;
+            _ambientSource.playOnAwake = true;
+            _ambientSource.spatialBlend = 0f;
+            _ambientSource.volume = 0.16f;
         }
 
-        public void PlayFlap() => _effectsSource.PlayOneShot(_flap, 0.7f);
-        public void PlayGate() => _effectsSource.PlayOneShot(_gate, 0.8f);
-        public void PlayHit(int removed) => _effectsSource.PlayOneShot(_hit, Mathf.Clamp01(0.4f + removed * 0.08f));
-        public void PlayFinish(bool won) => _effectsSource.PlayOneShot(won ? _win : _hit, 1f);
-
-        private static AudioClip Tone(string name, float startFrequency, float endFrequency, float duration)
+        public void PlayFlap()
         {
-            const int sampleRate = 22050;
-            int length = Mathf.CeilToInt(sampleRate * duration);
-            var samples = new float[length];
-            float phase = 0f;
-            for (int i = 0; i < length; i++)
-            {
-                float time = i / (float)length;
-                float frequency = Mathf.Lerp(startFrequency, endFrequency, time);
-                phase += frequency * Mathf.PI * 2f / sampleRate;
-                float envelope = Mathf.Sin(time * Mathf.PI) * (1f - time * 0.45f);
-                samples[i] = Mathf.Sin(phase) * envelope * 0.34f;
-            }
-            AudioClip clip = AudioClip.Create(name, length, 1, sampleRate, false);
-            clip.SetData(samples, 0);
-            return clip;
+            Play(_flapClip, 0.48f, 1f);
+        }
+
+        public void PlayGate()
+        {
+            if (_gateClips == null || _gateClips.Length == 0) return;
+            int index = _nextGateClip++ % _gateClips.Length;
+            float pitch = 0.97f + index * (0.06f / Mathf.Max(1, _gateClips.Length - 1));
+            Play(_gateClips[index], 0.92f, pitch);
+        }
+
+        public void PlayHit(int removed)
+        {
+            Play(_hitClip, Mathf.Clamp01(0.42f + removed * 0.07f), 0.94f);
+        }
+
+        public void PlayFinish(bool won)
+        {
+            Play(won ? _finishClip : _hitClip, 0.9f, won ? 1f : 0.88f);
+        }
+
+        private void Play(AudioClip clip, float volume, float pitch)
+        {
+            if (_effectsSource == null || clip == null) return;
+            _effectsSource.pitch = pitch;
+            _effectsSource.PlayOneShot(clip, volume);
         }
     }
 }

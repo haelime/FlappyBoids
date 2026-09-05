@@ -9,9 +9,6 @@ namespace FlappyBoids
         [Header("Scene-authored HUD")]
         [SerializeField] private Text _schoolCount;
         [SerializeField] private Text _gatesCount;
-        [SerializeField] private Text _nextDistance;
-        [SerializeField] private Text _aperture;
-        [SerializeField] private Text _fitPercent;
         [SerializeField] private Image _fitFill;
         [SerializeField] private GameObject _gameplayLayer;
         [SerializeField] private GameObject _readyPanel;
@@ -21,19 +18,16 @@ namespace FlappyBoids
         [SerializeField] private Text _resultBest;
 
         private FlappyBoidsGame _game;
+        private float _fitFillFullWidth;
 
         public bool HasAuthoredHierarchy =>
-            _schoolCount != null && _gatesCount != null && _nextDistance != null &&
-            _aperture != null && _fitPercent != null && _fitFill != null &&
+            _schoolCount != null && _gatesCount != null && _fitFill != null &&
             _gameplayLayer != null && _readyPanel != null && _resultPanel != null && _resultTitle != null &&
             _resultStats != null && _resultBest != null;
 
         public void ConfigureView(
             Text schoolCount,
             Text gatesCount,
-            Text nextDistance,
-            Text aperture,
-            Text fitPercent,
             Image fitFill,
             GameObject gameplayLayer,
             GameObject readyPanel,
@@ -44,9 +38,6 @@ namespace FlappyBoids
         {
             _schoolCount = schoolCount;
             _gatesCount = gatesCount;
-            _nextDistance = nextDistance;
-            _aperture = aperture;
-            _fitPercent = fitPercent;
             _fitFill = fitFill;
             _gameplayLayer = gameplayLayer;
             _readyPanel = readyPanel;
@@ -54,19 +45,36 @@ namespace FlappyBoids
             _resultTitle = resultTitle;
             _resultStats = resultStats;
             _resultBest = resultBest;
+            CacheFitFillWidth();
         }
 
         public void Configure(FlappyBoidsGame game)
         {
-            if (_game != null) _game.HudStateChanged -= Refresh;
+            if (_game != null)
+            {
+                _game.HudStateChanged -= Refresh;
+                if (_game.Swarm != null) _game.Swarm.FormationFitChanged -= RefreshFit;
+            }
             _game = game;
-            if (_game != null) _game.HudStateChanged += Refresh;
+            if (_game != null)
+            {
+                _game.HudStateChanged += Refresh;
+                if (_game.Swarm != null) _game.Swarm.FormationFitChanged += RefreshFit;
+            }
             Refresh();
         }
 
         private void OnDestroy()
         {
-            if (_game != null) _game.HudStateChanged -= Refresh;
+            if (_game == null) return;
+            _game.HudStateChanged -= Refresh;
+            if (_game.Swarm != null) _game.Swarm.FormationFitChanged -= RefreshFit;
+        }
+
+        private void RefreshFit()
+        {
+            if (_game == null || _game.Swarm == null) return;
+            SetFitVisual(_game.Swarm.FormationFit);
         }
 
         private void Refresh()
@@ -74,21 +82,9 @@ namespace FlappyBoids
             if (_game == null || _game.Swarm == null) return;
 
             int alive = _game.Swarm.AliveCount;
-            float formationFit = _game.Swarm.FormationFit;
             if (_schoolCount != null) _schoolCount.text = $"{alive:00} / {BoidSwarm.StartingBoids}";
             if (_gatesCount != null) _gatesCount.text = $"{_game.WallsPassed:00}";
-            if (_nextDistance != null) _nextDistance.text = $"{_game.NextGateDistance:0} m";
-            if (_aperture != null) _aperture.text = $"{_game.NextHoleDiameter:0.0} m";
-            if (_fitPercent != null) _fitPercent.text = $"{formationFit * 100f:0}%";
-            if (_fitFill != null)
-            {
-                _fitFill.fillAmount = formationFit;
-                _fitFill.color = formationFit >= 0.8f
-                    ? new Color(0.22f, 0.72f, 0.96f, 1f)
-                    : formationFit >= 0.55f
-                        ? new Color(0.10f, 0.47f, 0.78f, 1f)
-                        : new Color(0.07f, 0.25f, 0.62f, 1f);
-            }
+            SetFitVisual(Mathf.Clamp01(_game.Swarm.FormationFit));
 
             bool ready = _game.State == FlappyBoidsGame.RunState.Ready;
             bool gameOver = _game.State == FlappyBoidsGame.RunState.GameOver;
@@ -105,11 +101,30 @@ namespace FlappyBoids
                 _resultTitle.color = new Color(0.14f, 0.62f, 0.86f, 1f);
             }
             if (_resultStats != null)
-                _resultStats.text = $"GATES  {_game.WallsPassed:00}     FINAL SCHOOL  {alive:00}";
-            if (_resultBest != null)
-                _resultBest.text =
-                    $"BEST  {FlappyBoidsRecord.BestWalls:00} gates / {FlappyBoidsRecord.BestSurvivors:00} fish" +
-                    (_game.NewBest ? "\nNEW BEST RUN" : string.Empty);
+                _resultStats.text = $"GATES  {_game.WallsPassed:00}";
+            }
+
+        private void SetFitVisual(float formationFit)
+        {
+            if (_fitFill == null) return;
+            formationFit = Mathf.Clamp01(formationFit);
+            CacheFitFillWidth();
+            RectTransform fillRect = _fitFill.rectTransform;
+            Vector2 size = fillRect.sizeDelta;
+            size.x = _fitFillFullWidth * formationFit;
+            fillRect.sizeDelta = size;
+            _fitFill.color = formationFit >= 0.8f
+                ? new Color(0.22f, 0.72f, 0.96f, 1f)
+                : formationFit >= 0.55f
+                    ? new Color(0.10f, 0.47f, 0.78f, 1f)
+                    : new Color(0.07f, 0.25f, 0.62f, 1f);
         }
+
+        private void CacheFitFillWidth()
+        {
+            if (_fitFill == null || _fitFillFullWidth > 0f) return;
+            _fitFillFullWidth = Mathf.Max(0f, _fitFill.rectTransform.sizeDelta.x);
+        }
+
     }
 }

@@ -21,10 +21,11 @@ namespace FlappyBoids
         [SerializeField, Range(0.15f, 1.8f)] private float _roughness = 0.92f;
         [SerializeField, Range(0f, 1.2f)] private float _ridgeStrength = 0.58f;
         [SerializeField, Range(0f, 0.8f)] private float _chipStrength = 0.28f;
-        [SerializeField, Range(24, 44)] private int _crossSectionCells = 34;
-        [SerializeField, Range(6, 12)] private int _depthCells = 8;
+        [SerializeField, Range(20, 44)] private int _crossSectionCells = 28;
+        [SerializeField, Range(4, 12)] private int _depthCells = 6;
         [SerializeField] private bool _faceted = true;
         [SerializeField, Range(0.08f, 0.30f)] private float _lipThickness = 0.16f;
+        [SerializeField, Range(0.75f, 1f)] private float _lipDiameterScale = 0.9f;
 
         private Mesh _rockMesh;
         private Mesh _lipMesh;
@@ -80,13 +81,13 @@ namespace FlappyBoids
                 _rockFilter.sharedMesh = _rockMesh;
 
                 _lipRoot.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
-                _lipRoot.localScale = Vector3.one;
+                _lipRoot.localScale = new Vector3(_lipDiameterScale, _lipDiameterScale, 1f);
                 _lipRenderer.sharedMaterial = _lipMaterial;
                 float lipSpan = gate.Diameter + 1.6f;
                 ReplaceMesh(ref _lipMesh, MarchingCubesMeshBuilder.Build(
                     "Marching Cubes Mineral Lip",
                     new Bounds(Vector3.zero, new Vector3(lipSpan, lipSpan, 1.8f)),
-                    new Vector3Int(24, 24, 6),
+                    new Vector3Int(20, 20, 4),
                     point => LipDensity(point, gate.Radius, _lipThickness)));
                 _lipFilter.sharedMesh = _lipMesh;
             }

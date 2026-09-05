@@ -44,6 +44,8 @@ namespace FlappyBoids
         public float SpreadRadius { get; private set; }
         public float FormationFit { get; private set; }
 
+        public event System.Action FormationFitChanged;
+
         public void SetVisualPrefabs(GameObject[] fishVisualPrefabs)
         {
             _fishVisualPrefabs = fishVisualPrefabs;
@@ -144,18 +146,26 @@ namespace FlappyBoids
         {
             if (!_configured || !_entityManager.Exists(_controlEntity)) return;
 
+            float previousFormationFit = FormationFit;
             FlockControl control = _entityManager.GetComponentData<FlockControl>(_controlEntity);
             BoostNormalized = Mathf.Clamp01(control.BoostTime / 0.72f);
-            NativeArray<Entity> entities = _boidQuery.ToEntityArray(Allocator.Temp);
             Vector3 centerSum = Vector3.zero;
             Vector3 minimum = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
             Vector3 maximum = new Vector3(float.MinValue, float.MinValue, float.MinValue);
             int fitCount = 0;
 
-            for (int i = 0; i < entities.Length; i++)
+            int aliveCount = 0;
+            _staleEntities.Clear();
+            foreach (KeyValuePair<Entity, BirdVisual> pair in _visuals)
             {
-                Entity entity = entities[i];
-                if (!_visuals.TryGetValue(entity, out BirdVisual visual)) continue;
+                Entity entity = pair.Key;
+                BirdVisual visual = pair.Value;
+                if (!_entityManager.Exists(entity))
+                {
+                    _staleEntities.Add(entity);
+                    continue;
+                }
+
                 LocalTransform localTransform = _entityManager.GetComponentData<LocalTransform>(entity);
                 visual.Root.transform.SetPositionAndRotation(localTransform.Position, localTransform.Rotation);
                 float angle = Mathf.Sin(control.Elapsed * (control.BoostTime > 0f ? 22f : 12f) + visual.WingPhase) * 32f;
@@ -167,11 +177,9 @@ namespace FlappyBoids
                 maximum = Vector3.Max(maximum, position);
                 Vector2 guideOffset = new Vector2(position.x, position.y) - _guideCenter;
                 if (_guideRadius <= 0f || guideOffset.sqrMagnitude < _guideRadius * _guideRadius) fitCount++;
+                aliveCount++;
             }
 
-            _staleEntities.Clear();
-            foreach (KeyValuePair<Entity, BirdVisual> pair in _visuals)
-                if (!_entityManager.Exists(pair.Key)) _staleEntities.Add(pair.Key);
             for (int i = 0; i < _staleEntities.Count; i++)
             {
                 Entity entity = _staleEntities[i];
@@ -179,7 +187,7 @@ namespace FlappyBoids
                 _visuals.Remove(entity);
             }
 
-            AliveCount = entities.Length;
+            AliveCount = aliveCount;
             RemovedSinceLastFrame = Mathf.Max(0, _lastAliveCount - AliveCount);
             _lastAliveCount = AliveCount;
             if (AliveCount > 0)
@@ -193,7 +201,9 @@ namespace FlappyBoids
                 SpreadRadius = 0f;
                 FormationFit = 0f;
             }
-            entities.Dispose();
+
+            if (!Mathf.Approximately(FormationFit, previousFormationFit))
+                FormationFitChanged?.Invoke();
         }
 
         private void OnDestroy()

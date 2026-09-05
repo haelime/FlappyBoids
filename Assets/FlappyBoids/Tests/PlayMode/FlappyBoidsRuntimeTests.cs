@@ -1,10 +1,12 @@
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 namespace FlappyBoids.Tests
 {
@@ -32,13 +34,51 @@ namespace FlappyBoids.Tests
             Assert.That(gameplayLayer, Is.Not.Null);
             Assert.That(gameplayLayer.gameObject.activeSelf, Is.False,
                 "The authored Ready-state hierarchy must match its initial runtime visibility.");
+            Transform fitBar = gameplayLayer.Find("School Fit Bar");
+            Assert.That(fitBar, Is.Not.Null,
+                "The always-on school-fit bar must be authored under the gameplay HUD.");
+            Assert.That(fitBar.gameObject.activeSelf, Is.True);
+            Transform fitFillTransform = fitBar.Find("Fill");
+            Assert.That(fitFillTransform, Is.Not.Null,
+                "The centered fill must be part of the authored HUD hierarchy.");
+            Image fitFill = fitFillTransform.GetComponent<Image>();
+            Assert.That(fitFill, Is.Not.Null);
+            RectTransform fitFillRect = fitFill.rectTransform;
+            Assert.That(fitFillRect.anchorMin.x, Is.EqualTo(0.5f).Within(0.001f));
+            Assert.That(fitFillRect.anchorMax.x, Is.EqualTo(0.5f).Within(0.001f));
+            Assert.That(fitFillRect.pivot.x, Is.EqualTo(0.5f).Within(0.001f));
+            Assert.That(fitFill.type, Is.EqualTo(Image.Type.Simple));
+
+            float fullWidth = fitFillRect.sizeDelta.x;
+            MethodInfo setFitVisual = typeof(FlappyBoidsHud).GetMethod(
+                "SetFitVisual", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(setFitVisual, Is.Not.Null);
+            setFitVisual.Invoke(hud, new object[] { 0.4f });
+            Assert.That(fitFillRect.sizeDelta.x, Is.EqualTo(fullWidth * 0.4f).Within(0.01f),
+                "School Fit must shrink the authored fill equally from both sides.");
+            Assert.That(fitFillRect.anchoredPosition.x, Is.EqualTo(0f).Within(0.001f));
+            setFitVisual.Invoke(hud, new object[] { 1f });
             Assert.That(Object.FindObjectsByType<GateWall>().Length,
                 Is.EqualTo(FlappyBoidsGame.GatePoolSize),
                 "The infinite course should reuse a fixed-size gate pool.");
             Assert.That(Object.FindAnyObjectByType<InfiniteSeaTerrain>(), Is.Not.Null,
                 "The old corridor must be replaced by the recyclable Marching Cubes sea terrain.");
             Assert.That(Object.FindObjectsByType<MarchingCubesSeaChunk>().Length, Is.EqualTo(12));
+            MarchingCubesSeaChunk[] seaChunks = Object.FindObjectsByType<MarchingCubesSeaChunk>();
+            for (int i = 0; i < seaChunks.Length; i++)
+            {
+                Assert.That(seaChunks[i].GetComponent<MeshFilter>(), Is.Not.Null);
+                Assert.That(seaChunks[i].GetComponent<MeshRenderer>(), Is.Not.Null);
+            }
+            Transform godRays = game.transform.Find("04_Environment/03_Shader Volumetric God Rays");
+            Assert.That(godRays, Is.Not.Null,
+                "The underwater god-ray volume must be authored in the scene hierarchy.");
+            Assert.That(godRays.GetComponent<MeshRenderer>(), Is.Not.Null);
             GateWall[] gates = Object.FindObjectsByType<GateWall>();
+            System.Array.Sort(gates, (left, right) => left.Z.CompareTo(right.Z));
+            for (int i = 1; i < gates.Length; i++)
+                Assert.That(gates[i].Z - gates[i - 1].Z,
+                    Is.EqualTo(FlappyBoidsGame.DefaultGateSpacing).Within(0.01f));
             float smallestOpening = float.MaxValue;
             float largestOpening = 0f;
             for (int i = 0; i < gates.Length; i++)
@@ -56,7 +96,12 @@ namespace FlappyBoids.Tests
             for (int i = 0; i < audioSources.Length; i++)
                 foundAmbientLoop |= audioSources[i].loop && audioSources[i].clip != null;
             Assert.That(foundAmbientLoop, Is.True, "The authored underwater ambience must be assigned and looped.");
+            FlappyBoidsAudio feedbackAudio = Object.FindAnyObjectByType<FlappyBoidsAudio>();
+            Assert.That(feedbackAudio, Is.Not.Null);
+            Assert.That(feedbackAudio.HasAuthoredFeedback, Is.True,
+                "Gate feedback must use scene-authored IdleTogether clips and AudioSources.");
             Assert.That(game.Swarm.AliveCount, Is.EqualTo(BoidSwarm.StartingBoids));
+            Assert.That(Application.targetFrameRate, Is.EqualTo(60));
 
             EntityManager entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
             EntityQuery query = entityManager.CreateEntityQuery(ComponentType.ReadOnly<BoidAgent>());
@@ -92,6 +137,8 @@ namespace FlappyBoids.Tests
             yield return null;
             FlappyBoidsGame game = Object.FindAnyObjectByType<FlappyBoidsGame>();
             GateWall[] initialGates = Object.FindObjectsByType<GateWall>();
+            System.Array.Sort(initialGates, (left, right) => left.Z.CompareTo(right.Z));
+            GateWall firstGate = initialGates[0];
             float initialFurthestZ = float.MinValue;
             for (int i = 0; i < initialGates.Length; i++)
                 initialFurthestZ = Mathf.Max(initialFurthestZ, initialGates[i].Z);
@@ -117,12 +164,30 @@ namespace FlappyBoids.Tests
                 yield return null;
             }
 
+            Assert.That(game.WallsPassed, Is.GreaterThanOrEqualTo(1));
+            Assert.That(firstGate.Passed, Is.True,
+                "Passing should score immediately while the wall remains in the authored pool behind the school.");
+            Assert.That(firstGate.Z, Is.LessThan(game.Swarm.Center.z));
+
+            while (firstGate.Passed && elapsed < 8f && game.Swarm.AliveCount > 0)
+            {
+                elapsed += Time.deltaTime;
+                if (elapsed >= nextFlap)
+                {
+                    game.Swarm.SetInput(0f, true);
+                    nextFlap += 1.3f;
+                }
+                yield return null;
+            }
+
+            Assert.That(firstGate.Passed, Is.False,
+                "A passed wall should return to the forward pool only after it has cleared the camera.");
+
             GateWall[] recycledGates = Object.FindObjectsByType<GateWall>();
             float recycledFurthestZ = float.MinValue;
             for (int i = 0; i < recycledGates.Length; i++)
                 recycledFurthestZ = Mathf.Max(recycledFurthestZ, recycledGates[i].Z);
 
-            Assert.That(game.WallsPassed, Is.GreaterThanOrEqualTo(1));
             Assert.That(recycledGates.Length, Is.EqualTo(FlappyBoidsGame.GatePoolSize));
             CollectionAssert.AreEquivalent(initialGates, recycledGates,
                 "Gate recycling must reuse the authored pool without spawning replacements.");

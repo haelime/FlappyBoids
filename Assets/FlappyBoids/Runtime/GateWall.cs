@@ -20,7 +20,9 @@ namespace FlappyBoids
 
         public void SetHoleDiameter(float diameter)
         {
-            _holeDiameter = Mathf.Max(1f, diameter);
+            float nextDiameter = Mathf.Max(1f, diameter);
+            if (Mathf.Approximately(_holeDiameter, nextDiameter)) return;
+            _holeDiameter = nextDiameter;
             MarchingCubesGateVisual visual = GetComponent<MarchingCubesGateVisual>();
             if (visual != null) visual.Rebuild();
         }

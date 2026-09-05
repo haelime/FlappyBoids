@@ -18,7 +18,8 @@ namespace FlappyBoids
 
         public const int GatePoolSize = 12;
         public const float DefaultCourseSpeed = 8.1f;
-        public const float DefaultGateSpacing = 18f;
+        public const float DefaultGateSpacing = 48f;
+        public const float DefaultGateRecycleBehindCameraDistance = 4f;
         public const float DefaultInitialHoleDiameter = 6.1f;
         public const float DefaultMinimumHoleDiameter = 3.8f;
         public const float DefaultHoleShrinkPerGate = 0.09f;
@@ -36,6 +37,8 @@ namespace FlappyBoids
         [SerializeField, Min(1f)] private float _initialHoleDiameter = DefaultInitialHoleDiameter;
         [SerializeField, Min(1f)] private float _minimumHoleDiameter = DefaultMinimumHoleDiameter;
         [SerializeField, Min(0f)] private float _holeShrinkPerGate = DefaultHoleShrinkPerGate;
+        [SerializeField, Min(0f)] private float _gateRecycleBehindCameraDistance =
+            DefaultGateRecycleBehindCameraDistance;
 
         private readonly List<GateWall> _gates = new List<GateWall>(GatePoolSize);
         private GateSnapshot[] _initialGateStates = Array.Empty<GateSnapshot>();
@@ -113,7 +116,7 @@ namespace FlappyBoids
             PrepareInitialGatePool();
 
             _built = true;
-            Application.targetFrameRate = 120;
+            Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
 
             _swarm.Configure(_gates, _courseSpeed);
@@ -178,6 +181,7 @@ namespace FlappyBoids
             if (_swarm.RemovedSinceLastFrame > 0) _audio.PlayHit(_swarm.RemovedSinceLastFrame);
 
             AdvancePooledCourse(Time.deltaTime);
+            MarkPassedGates();
             RecyclePassedGates();
             UpdateGuidance();
 
@@ -224,11 +228,30 @@ namespace FlappyBoids
             PublishHudStateIfChanged(true);
         }
 
+        private void MarkPassedGates()
+        {
+            for (int i = 0; i < _gates.Count; i++)
+            {
+                GateWall gate = _gates[i];
+                if (gate.Passed || _swarm.Center.z <= gate.Z + GateWall.Thickness + 1f) continue;
+
+                gate.Passed = true;
+                WallsPassed++;
+                _audio.PlayGate();
+            }
+        }
+
         private void RecyclePassedGates()
         {
             bool obstaclesChanged = false;
-            while (_gates.Count > 0 &&
-                   _swarm.Center.z > _gates[0].Z + GateWall.Thickness + 1f)
+            float cameraZ = _followCamera != null
+                ? _followCamera.transform.position.z
+                : _swarm.Center.z - 12f;
+            while (_gates.Count > 0 && ShouldRecyclePassedGate(
+                       _gates[0].Passed,
+                       _gates[0].Z,
+                       cameraZ,
+                       _gateRecycleBehindCameraDistance))
             {
                 GateWall recycled = _gates[0];
                 GateWall previousLast = _gates[_gates.Count - 1];
@@ -243,9 +266,7 @@ namespace FlappyBoids
                 _gates.RemoveAt(0);
                 _gates.Add(recycled);
                 _nextGateSequence++;
-                WallsPassed++;
                 obstaclesChanged = true;
-                _audio.PlayGate();
             }
 
             if (obstaclesChanged) _swarm.RefreshGateObstacles(_gates);
@@ -320,6 +341,15 @@ namespace FlappyBoids
             return Mathf.Max(minimum, initial - Mathf.Max(0, gateIndex) * Mathf.Max(0f, shrinkPerGate));
         }
 
+        public static bool ShouldRecyclePassedGate(
+            bool passed,
+            float gateZ,
+            float cameraZ,
+            float behindCameraDistance = DefaultGateRecycleBehindCameraDistance)
+        {
+            return passed && gateZ < cameraZ - Mathf.Max(0f, behindCameraDistance);
+        }
+
         public static Vector2 CalculateHoleCenter(int gateIndex, Vector2 previousCenter)
         {
             if (gateIndex <= 0) return new Vector2(0f, 5.5f);
@@ -386,9 +416,6 @@ namespace FlappyBoids
             {
                 Alive = _swarm.AliveCount,
                 Walls = WallsPassed,
-                NextDistanceMeters = Mathf.RoundToInt(NextGateDistance),
-                ApertureTenths = Mathf.RoundToInt(NextHoleDiameter * 10f),
-                FitPercent = Mathf.RoundToInt(_swarm.FormationFit * 100f),
                 State = State,
                 NewBest = NewBest
             };
@@ -425,17 +452,11 @@ namespace FlappyBoids
         {
             public int Alive;
             public int Walls;
-            public int NextDistanceMeters;
-            public int ApertureTenths;
-            public int FitPercent;
             public RunState State;
             public bool NewBest;
 
             public bool Equals(HudSignature other) =>
-                Alive == other.Alive && Walls == other.Walls &&
-                NextDistanceMeters == other.NextDistanceMeters &&
-                ApertureTenths == other.ApertureTenths && FitPercent == other.FitPercent &&
-                State == other.State && NewBest == other.NewBest;
+                Alive == other.Alive && Walls == other.Walls && State == other.State && NewBest == other.NewBest;
         }
     }
 

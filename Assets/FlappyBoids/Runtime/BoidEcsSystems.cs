@@ -12,13 +12,27 @@ namespace FlappyBoids
     public partial struct BoidFlockingSystem : ISystem
     {
         private EntityQuery _boidQuery;
+        private NativeArray<float3> _positions;
+        private NativeArray<float3> _velocities;
+        private NativeArray<float3> _nextVelocities;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             _boidQuery = SystemAPI.QueryBuilder().WithAllRW<LocalTransform, BoidAgent>().Build();
+            _positions = new NativeArray<float3>(BoidSwarm.StartingBoids, Allocator.Persistent);
+            _velocities = new NativeArray<float3>(BoidSwarm.StartingBoids, Allocator.Persistent);
+            _nextVelocities = new NativeArray<float3>(BoidSwarm.StartingBoids, Allocator.Persistent);
             state.RequireForUpdate<FlockControl>();
             state.RequireForUpdate<FlockParameters>();
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+            if (_positions.IsCreated) _positions.Dispose();
+            if (_velocities.IsCreated) _velocities.Dispose();
+            if (_nextVelocities.IsCreated) _nextVelocities.Dispose();
         }
 
         [BurstCompile]
@@ -36,37 +50,41 @@ namespace FlappyBoids
             FlockParameters parameters = SystemAPI.GetSingleton<FlockParameters>();
             AdvanceLeader(ref control, parameters, deltaTime);
 
-            NativeArray<LocalTransform> transforms = _boidQuery.ToComponentDataArray<LocalTransform>(Allocator.TempJob);
-            NativeArray<BoidAgent> agents = _boidQuery.ToComponentDataArray<BoidAgent>(Allocator.TempJob);
-            var positions = new NativeArray<float3>(transforms.Length, Allocator.TempJob);
-            var velocities = new NativeArray<float3>(agents.Length, Allocator.TempJob);
-            var nextVelocities = new NativeArray<float3>(agents.Length, Allocator.TempJob);
-
-            for (int i = 0; i < transforms.Length; i++)
+            state.Dependency.Complete();
+            int activeCount = _boidQuery.CalculateEntityCount();
+            int index = 0;
+            foreach ((RefRO<LocalTransform> transform, RefRO<BoidAgent> agent) in
+                     SystemAPI.Query<RefRO<LocalTransform>, RefRO<BoidAgent>>())
             {
-                positions[i] = transforms[i].Position;
-                velocities[i] = agents[i].Velocity;
+                _positions[index] = transform.ValueRO.Position;
+                _velocities[index] = agent.ValueRO.Velocity;
+                index++;
             }
 
             var flockJob = new FlockVelocityJob
             {
-                Positions = positions,
-                Velocities = velocities,
-                OutputVelocities = nextVelocities,
+                Positions = _positions,
+                Velocities = _velocities,
+                OutputVelocities = _nextVelocities,
+                ActiveCount = activeCount,
                 Parameters = parameters,
                 Anchor = control.Anchor,
                 LeaderVelocity = new float3(control.HorizontalVelocity, control.VerticalVelocity, 0f),
                 Boosted = control.BoostTime > 0f,
                 DeltaTime = deltaTime
             };
-            JobHandle flockHandle = flockJob.Schedule(transforms.Length, 16, state.Dependency);
+            #if UNITY_WEBGL && !UNITY_EDITOR
+            flockJob.Run(activeCount);
+            #else
+            JobHandle flockHandle = flockJob.Schedule(activeCount, 16);
             flockHandle.Complete();
+            #endif
 
-            int index = 0;
+            index = 0;
             foreach ((RefRW<LocalTransform> transform, RefRW<BoidAgent> agent) in
                      SystemAPI.Query<RefRW<LocalTransform>, RefRW<BoidAgent>>())
             {
-                float3 velocity = nextVelocities[index];
+                float3 velocity = _nextVelocities[index];
                 LocalTransform value = transform.ValueRO;
                 value.Position += velocity * deltaTime;
                 value.Rotation = math.slerp(value.Rotation, quaternion.LookRotationSafe(velocity, math.up()),
@@ -79,11 +97,6 @@ namespace FlappyBoids
                 index++;
             }
 
-            transforms.Dispose();
-            agents.Dispose();
-            positions.Dispose();
-            velocities.Dispose();
-            nextVelocities.Dispose();
             SystemAPI.SetSingleton(control);
             state.Dependency = default;
         }
@@ -123,6 +136,7 @@ namespace FlappyBoids
             [ReadOnly] public NativeArray<float3> Positions;
             [ReadOnly] public NativeArray<float3> Velocities;
             [WriteOnly] public NativeArray<float3> OutputVelocities;
+            public int ActiveCount;
             public FlockParameters Parameters;
             public float3 Anchor;
             public float3 LeaderVelocity;
@@ -140,7 +154,7 @@ namespace FlappyBoids
                 int alignmentCount = 0;
                 int cohesionCount = 0;
 
-                for (int otherIndex = 0; otherIndex < Positions.Length; otherIndex++)
+                for (int otherIndex = 0; otherIndex < ActiveCount; otherIndex++)
                 {
                     if (index == otherIndex) continue;
                     float3 difference = position - Positions[otherIndex];

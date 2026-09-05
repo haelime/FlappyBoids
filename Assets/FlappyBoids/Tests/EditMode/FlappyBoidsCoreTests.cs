@@ -4,6 +4,7 @@ using NUnit.Framework;
 using UnityEditor;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace FlappyBoids.Tests
 {
@@ -22,8 +23,23 @@ namespace FlappyBoids.Tests
             "Assets/FlappyBoids/Prefabs/Environment/P_MarchingCubesRockGate.prefab";
         private const string MarchingCubesGateRuntimePath =
             "Assets/FlappyBoids/Runtime/MarchingCubesGateVisual.cs";
+        private const string MarchingCubesSeaChunkRuntimePath =
+            "Assets/FlappyBoids/Runtime/MarchingCubesSeaChunk.cs";
+        private const string PipeSafetyMaterialPath =
+            "Assets/FlappyBoids/Art/Materials/M_Pipe_SafetyRing.mat";
+        private const string GodRayShaderPath =
+            "Assets/FlappyBoids/Art/Shaders/UnderwaterVolumetricGodRays.shader";
+        private const string GodRayMaterialPath =
+            "Assets/FlappyBoids/Art/Materials/M_Underwater_GodRays.mat";
+        private const string GodRayPrefabPath =
+            "Assets/FlappyBoids/Prefabs/Environment/P_UnderwaterGodRayVolume.prefab";
         private const string GameRuntimePath = "Assets/FlappyBoids/Runtime/FlappyBoidsGame.cs";
         private const string HudRuntimePath = "Assets/FlappyBoids/Runtime/FlappyBoidsHud.cs";
+        private const string AudioRuntimePath = "Assets/FlappyBoids/Runtime/FlappyBoidsAudio.cs";
+        private const string BoidSystemsRuntimePath = "Assets/FlappyBoids/Runtime/BoidEcsSystems.cs";
+        private const string BoidSwarmRuntimePath = "Assets/FlappyBoids/Runtime/BoidSwarm.cs";
+        private const string WebBuildPath = "Assets/FlappyBoids/Editor/FlappyBoidsWebBuild.cs";
+        private const string MobileRenderPipelinePath = "Assets/Settings/Mobile_RPAsset.asset";
 
         [Test]
         public void AuthoredScene_AllPrefabSourceGuidsResolve()
@@ -85,11 +101,97 @@ namespace FlappyBoids.Tests
             Assert.That(serializedVisual.FindProperty("_lipRoot").objectReferenceValue, Is.Not.Null);
             Assert.That(serializedVisual.FindProperty("_lipFilter").objectReferenceValue, Is.Not.Null);
             Assert.That(serializedVisual.FindProperty("_lipRenderer").objectReferenceValue, Is.Not.Null);
+            Assert.That(serializedVisual.FindProperty("_crossSectionCells").intValue, Is.EqualTo(28));
+            Assert.That(serializedVisual.FindProperty("_depthCells").intValue, Is.EqualTo(6));
             Assert.That(serializedVisual.FindProperty("_lipThickness").floatValue, Is.EqualTo(0.16f));
+            Assert.That(serializedVisual.FindProperty("_lipDiameterScale").floatValue, Is.EqualTo(0.9f));
+            Assert.That(lip.localScale.x, Is.EqualTo(0.9f).Within(0.0001f));
+            Assert.That(lip.localScale.y, Is.EqualTo(0.9f).Within(0.0001f));
+            Assert.That(lip.localScale.z, Is.EqualTo(1f).Within(0.0001f));
+            Assert.That(lip.GetComponent<MeshRenderer>().shadowCastingMode, Is.EqualTo(ShadowCastingMode.Off));
+
+            Material safetyMaterial = AssetDatabase.LoadAssetAtPath<Material>(PipeSafetyMaterialPath);
+            Assert.That(safetyMaterial, Is.Not.Null);
+            Assert.That(lip.GetComponent<MeshRenderer>().sharedMaterial, Is.EqualTo(safetyMaterial));
+            Color safetyColor = safetyMaterial.GetColor("_BaseColor");
+            Assert.That(safetyColor.maxColorComponent, Is.GreaterThan(1f),
+                "The thin safety lip needs an HDR unlit color so it remains visible through underwater fog.");
+            Assert.That(safetyColor.r, Is.GreaterThan(safetyColor.g * 4f));
 
             string source = File.ReadAllText(MarchingCubesGateRuntimePath);
             Assert.That(source, Does.Not.Match(@"new\s+GameObject\s*\("));
             Assert.That(source, Does.Not.Match(@"\bAddComponent\s*<"));
+        }
+
+        [Test]
+        public void MarchingCubesSeaPool_ReusesAuthoredRenderersWithoutRuntimeRebuildFallback()
+        {
+            string source = File.ReadAllText(MarchingCubesSeaChunkRuntimePath);
+            Assert.That(source, Does.Not.Match(@"new\s+GameObject\s*\("));
+            Assert.That(source, Does.Not.Match(@"\bAddComponent\s*<"));
+
+            Match setIndex = Regex.Match(source,
+                @"public void SetChunkIndex\(int chunkIndex\)(?<body>[\s\S]*?)public void ResetChunk");
+            Assert.That(setIndex.Success, Is.True);
+            Assert.That(setIndex.Groups["body"].Value, Does.Not.Contain("Rebuild()"),
+                "Returning a sea chunk to the pool must not synchronously regenerate its mesh.");
+
+            string sceneYaml = File.ReadAllText(AuthoredScenePath);
+            Assert.That(Regex.Matches(sceneYaml, @"\n  _meshFilter: \{fileID: \d+\}").Count,
+                Is.EqualTo(12));
+            Assert.That(Regex.Matches(sceneYaml, @"\n  _meshRenderer: \{fileID: \d+\}").Count,
+                Is.EqualTo(12));
+        }
+
+        [TestCase("M_Fish_Blue")]
+        [TestCase("M_Fish_Gold")]
+        [TestCase("M_Fish_Coral")]
+        [TestCase("M_Fish_Fin")]
+        [TestCase("M_Fish_Eye")]
+        public void FishMaterials_EnableGpuInstancing(string materialName)
+        {
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(
+                $"Assets/FlappyBoids/Art/Materials/{materialName}.mat");
+
+            Assert.That(material, Is.Not.Null);
+            Assert.That(material.enableInstancing, Is.True,
+                "The 42 multi-part fish should be GPU-instanced instead of issuing one draw per renderer.");
+        }
+
+        [Test]
+        public void UnderwaterGodRays_AreShaderDrivenAndAuthoredAsOnePrefabVolume()
+        {
+            Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(GodRayShaderPath);
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(GodRayMaterialPath);
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(GodRayPrefabPath);
+            Assert.That(shader, Is.Not.Null);
+            Assert.That(shader.isSupported, Is.True);
+            Assert.That(material, Is.Not.Null);
+            Assert.That(material.shader, Is.EqualTo(shader));
+            Assert.That(prefab, Is.Not.Null);
+
+            MeshFilter filter = prefab.GetComponent<MeshFilter>();
+            MeshRenderer renderer = prefab.GetComponent<MeshRenderer>();
+            Assert.That(filter, Is.Not.Null);
+            Assert.That(filter.sharedMesh, Is.Not.Null);
+            Assert.That(renderer, Is.Not.Null);
+            Assert.That(renderer.sharedMaterial, Is.EqualTo(material));
+
+            string shaderSource = File.ReadAllText(GodRayShaderPath);
+            Assert.That(shaderSource, Does.Contain("defined(SHADER_API_GLES3)"));
+            Assert.That(shaderSource, Does.Contain("const int StepCount = 8"));
+            Assert.That(shaderSource, Does.Contain("const int StepCount = 12"));
+            Assert.That(shaderSource, Does.Contain("SampleSceneDepth"));
+            Assert.That(shaderSource, Does.Contain("ComputeWorldSpacePosition"));
+            Assert.That(shaderSource, Does.Not.Contain("GrabPass"));
+
+            string sceneYaml = File.ReadAllText(AuthoredScenePath);
+            string prefabGuid = AssetDatabase.AssetPathToGUID(GodRayPrefabPath);
+            Assert.That(sceneYaml, Does.Contain("03_Shader Volumetric God Rays"));
+            Assert.That(Regex.Matches(
+                sceneYaml,
+                $@"m_SourcePrefab: \{{fileID: 100100000, guid: {prefabGuid}, type: 3\}}").Count,
+                Is.EqualTo(1));
         }
 
         [Test]
@@ -106,13 +208,25 @@ namespace FlappyBoids.Tests
             Assert.That(sceneYaml, Does.Contain("m_Name: Top HUD Rail"));
             Assert.That(sceneYaml, Does.Contain("School Status Plate"));
             Assert.That(sceneYaml, Does.Contain("Gate Progress Plate"));
-            Assert.That(sceneYaml, Does.Contain("Passage Telemetry Plate"));
+            Assert.That(sceneYaml, Does.Contain("m_Name: School Fit Bar"));
+            Assert.That(sceneYaml, Does.Not.Contain("Gate Pass School Fit Feedback"));
+            Assert.That(sceneYaml, Does.Not.Contain("m_Text: SCHOOL FIT"));
+            Assert.That(sceneYaml, Does.Not.Contain("m_Text: 100%"));
+            Assert.That(sceneYaml, Does.Not.Contain("m_Text: NEXT"));
+            Assert.That(sceneYaml, Does.Not.Contain("m_Text: OPENING"));
+            Assert.That(sceneYaml, Does.Not.Contain("_nextDistance:"));
+            Assert.That(sceneYaml, Does.Not.Contain("_aperture:"));
+            Assert.That(sceneYaml, Does.Contain("m_RenderMode: 0"));
+            Assert.That(sceneYaml, Does.Contain("m_PixelPerfect: 1"));
+            Assert.That(sceneYaml, Does.Contain("m_ReferenceResolution: {x: 1600, y: 900}"));
+            Assert.That(sceneYaml, Does.Contain("m_FontSize: 76"));
+            Assert.That(sceneYaml, Does.Contain("m_FontSize: 38"));
             Assert.That(sceneYaml, Does.Contain("m_Name: Ready Layer"));
             Assert.That(sceneYaml, Does.Contain("m_Text: PRESS ANY BUTTON"));
             Assert.That(Regex.Matches(
                 sceneYaml,
                 $@"m_SourcePrefab: \{{fileID: 100100000, guid: {plateGuid}, type: 3\}}").Count,
-                Is.EqualTo(3));
+                Is.EqualTo(2));
             Assert.That(Regex.Matches(
                 sceneYaml,
                 $@"m_SourcePrefab: \{{fileID: 100100000, guid: {modalGuid}, type: 3\}}").Count,
@@ -144,8 +258,48 @@ namespace FlappyBoids.Tests
             Assert.That(source, Does.Not.Match(@"new\s+GameObject\s*\("));
             Assert.That(source, Does.Not.Match(@"\bInstantiate\s*\("));
             Assert.That(source, Does.Not.Match(@"\bAddComponent\s*<"));
+            Assert.That(source, Does.Not.Contain("ShowGatePassFeedback"));
             Assert.That(source, Does.Not.Contain("private void LateUpdate()"),
                 "The HUD should react to game-state events instead of polling every frame.");
+
+            string gameSource = File.ReadAllText(GameRuntimePath);
+            Match hudSignature = Regex.Match(gameSource,
+                @"private struct HudSignature(?<body>[\s\S]*?)\n        \}");
+            Assert.That(hudSignature.Success, Is.True);
+            Assert.That(hudSignature.Groups["body"].Value, Does.Not.Contain("NextDistanceMeters"));
+            Assert.That(hudSignature.Groups["body"].Value, Does.Not.Contain("ApertureTenths"));
+            Assert.That(hudSignature.Groups["body"].Value, Does.Not.Contain("FitPercent"));
+            Assert.That(hudSignature.Groups["body"].Value, Does.Not.Contain("FitSteps"));
+            Assert.That(source, Does.Contain("FormationFitChanged"),
+                "The centered fit bar should react immediately to the swarm's calculated fit event.");
+        }
+
+        [Test]
+        public void AuthoredAudio_UsesImportedIdleTogetherClipsWithoutRuntimeConstructionFallback()
+        {
+            string[] clipPaths =
+            {
+                "Assets/FlappyBoids/Imported/IdleTogetherSounds/click1.wav",
+                "Assets/FlappyBoids/Imported/IdleTogetherSounds/click2.wav",
+                "Assets/FlappyBoids/Imported/IdleTogetherSounds/pop1.mp3",
+                "Assets/FlappyBoids/Imported/IdleTogetherSounds/pop_variation-01.mp3",
+                "Assets/FlappyBoids/Imported/IdleTogetherSounds/pop_variation-04.mp3",
+                "Assets/FlappyBoids/Imported/IdleTogetherSounds/pop_variation-05.mp3",
+                "Assets/FlappyBoids/Imported/IdleTogetherSounds/pop_variation-08.mp3"
+            };
+            string sceneYaml = File.ReadAllText(AuthoredScenePath);
+            for (int i = 0; i < clipPaths.Length; i++)
+            {
+                AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(clipPaths[i]);
+                Assert.That(clip, Is.Not.Null, $"Missing copied IdleTogether audio: {clipPaths[i]}");
+                Assert.That(sceneYaml, Does.Contain(AssetDatabase.AssetPathToGUID(clipPaths[i])));
+            }
+
+            string audioSource = File.ReadAllText(AudioRuntimePath);
+            Assert.That(audioSource, Does.Not.Contain("AudioClip.Create"));
+            Assert.That(audioSource, Does.Not.Match(@"\bAddComponent\s*<"));
+            Assert.That(audioSource, Does.Not.Match(@"new\s+GameObject\s*\("));
+            Assert.That(audioSource, Does.Contain("_gateClips"));
         }
 
         [Test]
@@ -307,6 +461,62 @@ namespace FlappyBoids.Tests
             float diameter = FlappyBoidsGame.CalculateHoleDiameter(100, 5f, 1f, 8f);
 
             Assert.That(diameter, Is.EqualTo(5f));
+        }
+
+        [Test]
+        public void InfiniteCourse_UsesDoubleGateSpacingAndRecyclesOnlyBehindCamera()
+        {
+            Assert.That(FlappyBoidsGame.DefaultGateSpacing, Is.EqualTo(48f));
+            Assert.That(FlappyBoidsGame.ShouldRecyclePassedGate(true, -9f, -10f), Is.False);
+            Assert.That(FlappyBoidsGame.ShouldRecyclePassedGate(true, -14.1f, -10f), Is.True);
+            Assert.That(FlappyBoidsGame.ShouldRecyclePassedGate(false, -30f, -10f), Is.False);
+
+            string sceneYaml = File.ReadAllText(AuthoredScenePath);
+            Assert.That(sceneYaml, Does.Contain("_gateSpacing: 48"));
+            Assert.That(sceneYaml, Does.Contain("_gateRecycleBehindCameraDistance: 4"));
+        }
+
+        [Test]
+        public void WebGlRelease_UsesLeanRenderingAndBuildSettings()
+        {
+            string sceneYaml = File.ReadAllText(AuthoredScenePath);
+            Assert.That(Regex.Matches(sceneYaml, @"\n  _lateralCells: 20").Count, Is.EqualTo(12));
+            Assert.That(Regex.Matches(sceneYaml, @"\n  _lengthCells: 16").Count, Is.EqualTo(12));
+            Assert.That(sceneYaml, Does.Not.Contain("m_CastShadows: 1"));
+
+            string mobilePipeline = File.ReadAllText(MobileRenderPipelinePath);
+            Assert.That(mobilePipeline, Does.Contain("m_RenderScale: 0.8"));
+            Assert.That(mobilePipeline, Does.Contain("m_MainLightShadowsSupported: 0"));
+            Assert.That(mobilePipeline, Does.Contain("m_AnyShadowsSupported: 0"));
+
+            string buildSource = File.ReadAllText(WebBuildPath);
+            Assert.That(buildSource, Does.Contain("BuildTarget.WebGL"));
+            Assert.That(buildSource, Does.Contain("BuildOptions.None"));
+            Assert.That(buildSource, Does.Contain("WebGLCompressionFormat.Brotli"));
+            Assert.That(buildSource, Does.Contain("ManagedStrippingLevel.High"));
+            Assert.That(buildSource, Does.Contain("Il2CppCodeGeneration.OptimizeSize"));
+            Assert.That(buildSource, Does.Contain("WebGLExceptionSupport.None"));
+            Assert.That(buildSource, Does.Contain("WebGLDebugSymbolMode.Off"));
+        }
+
+        [Test]
+        public void BoidHotPath_ReusesBuffersAndRunsSynchronouslyOnWebGl()
+        {
+            string systems = File.ReadAllText(BoidSystemsRuntimePath);
+            Match flockSystem = Regex.Match(systems,
+                @"public partial struct BoidFlockingSystem(?<body>[\s\S]*?)public partial struct GateCourseScrollSystem");
+            Assert.That(flockSystem.Success, Is.True);
+            Assert.That(flockSystem.Groups["body"].Value, Does.Not.Contain("Allocator.TempJob"));
+            Assert.That(flockSystem.Groups["body"].Value, Does.Not.Contain("ToComponentDataArray"));
+            Assert.That(flockSystem.Groups["body"].Value, Does.Contain("Allocator.Persistent"));
+            Assert.That(flockSystem.Groups["body"].Value, Does.Contain("UNITY_WEBGL"));
+            Assert.That(flockSystem.Groups["body"].Value, Does.Contain("flockJob.Run(activeCount)"));
+
+            string swarm = File.ReadAllText(BoidSwarmRuntimePath);
+            Match lateUpdate = Regex.Match(swarm,
+                @"private void LateUpdate\(\)(?<body>[\s\S]*?)private void OnDestroy");
+            Assert.That(lateUpdate.Success, Is.True);
+            Assert.That(lateUpdate.Groups["body"].Value, Does.Not.Contain("ToEntityArray"));
         }
 
         [TestCase(3, 8, 2, 42, true)]

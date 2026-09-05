@@ -13,13 +13,17 @@ namespace FlappyBoids
         [SerializeField] private float _length = DefaultLength;
         [SerializeField] private Material _rockMaterial;
 
+        [Header("Authored hierarchy")]
+        [SerializeField] private MeshFilter _meshFilter;
+        [SerializeField] private MeshRenderer _meshRenderer;
+
         [Header("Rugged rock authoring")]
         [SerializeField] private int _seed = 1337;
         [SerializeField, Range(0.15f, 1.8f)] private float _roughness = 1.05f;
         [SerializeField, Range(0f, 1.2f)] private float _ridgeStrength = 0.64f;
         [SerializeField, Range(0f, 0.8f)] private float _chipStrength = 0.24f;
-        [SerializeField, Range(18, 36)] private int _lateralCells = 26;
-        [SerializeField, Range(12, 28)] private int _lengthCells = 22;
+        [SerializeField, Range(16, 36)] private int _lateralCells = 20;
+        [SerializeField, Range(12, 28)] private int _lengthCells = 16;
         [SerializeField] private bool _faceted = true;
 
         private Mesh _mesh;
@@ -29,12 +33,19 @@ namespace FlappyBoids
         public float Length => _length;
         public int TriangleCount => _mesh == null ? 0 : _mesh.triangles.Length / 3;
 
-        public void Configure(int chunkIndex, Material rockMaterial, float length = DefaultLength)
+        public void Configure(
+            int chunkIndex,
+            Material rockMaterial,
+            MeshFilter meshFilter,
+            MeshRenderer meshRenderer,
+            float length = DefaultLength)
         {
             _initialChunkIndex = chunkIndex;
             _chunkIndex = chunkIndex;
             _length = Mathf.Max(12f, length);
             _rockMaterial = rockMaterial;
+            _meshFilter = meshFilter;
+            _meshRenderer = meshRenderer;
             ApplyPosition();
             Rebuild();
         }
@@ -44,14 +55,12 @@ namespace FlappyBoids
             if (_chunkIndex == chunkIndex) return;
             _chunkIndex = chunkIndex;
             ApplyPosition();
-            Rebuild();
         }
 
         public void ResetChunk()
         {
             _chunkIndex = _initialChunkIndex;
             ApplyPosition();
-            Rebuild();
         }
 
         private void OnEnable()
@@ -72,14 +81,19 @@ namespace FlappyBoids
         public void Rebuild()
         {
             if (_rebuilding || !isActiveAndEnabled) return;
+            if (_meshFilter == null) _meshFilter = GetComponent<MeshFilter>();
+            if (_meshRenderer == null) _meshRenderer = GetComponent<MeshRenderer>();
+            if (_meshFilter == null || _meshRenderer == null)
+            {
+                Debug.LogError(
+                    $"{nameof(MarchingCubesSeaChunk)} on '{name}' requires an authored MeshFilter and MeshRenderer.",
+                    this);
+                return;
+            }
             _rebuilding = true;
             try
             {
-                MeshFilter filter = GetComponent<MeshFilter>();
-                if (filter == null) filter = gameObject.AddComponent<MeshFilter>();
-                MeshRenderer renderer = GetComponent<MeshRenderer>();
-                if (renderer == null) renderer = gameObject.AddComponent<MeshRenderer>();
-                renderer.sharedMaterial = _rockMaterial;
+                _meshRenderer.sharedMaterial = _rockMaterial;
                 float worldStart = _chunkIndex * _length;
                 Mesh replacement = MarchingCubesMeshBuilder.Build(
                     $"Marching Cubes Sea Chunk {_chunkIndex}",
@@ -90,7 +104,7 @@ namespace FlappyBoids
                 DestroyGeneratedMesh(_mesh);
                 _mesh = replacement;
                 _mesh.hideFlags = HideFlags.DontSave;
-                filter.sharedMesh = _mesh;
+                _meshFilter.sharedMesh = _mesh;
             }
             finally
             {
