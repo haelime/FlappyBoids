@@ -2,6 +2,23 @@
 
 Unity 6 URP와 DOTS Entities 6.4 기반 3D TPS fish-school 게임입니다. 메인 씬은 `Assets/FlappyBoids/Scenes/FlappyBoids.unity`입니다.
 
+[플레이 영상](https://www.youtube.com/watch?v=UZPNwhEVvLM) / [포트폴리오: Boids에서 게임으로](https://haelime.github.io/posts/gpu-boids-simulation/)
+
+## 시작하기
+
+1. Unity Hub에서 저장소를 Unity `6000.4.11f1`로 엽니다.
+2. Package Manager의 dependency 설치와 에셋 import가 끝날 때까지 기다립니다.
+3. `Assets/FlappyBoids/Scenes/FlappyBoids.unity`를 열고 Play를 누릅니다.
+
+## 핵심 코드
+
+- [BoidEcsSystems.cs](Assets/FlappyBoids/Runtime/BoidEcsSystems.cs): Burst Job의 Boids 계산, 코스 이동과 개별 fish 충돌 판정
+- [BoidSwarm.cs](Assets/FlappyBoids/Runtime/BoidSwarm.cs): ECS 상태와 fish Prefab 표현 연결
+- [FlappyBoidsGame.cs](Assets/FlappyBoids/Runtime/FlappyBoidsGame.cs): 입력, 진행 상태와 재시작 흐름
+- [Tests](Assets/FlappyBoids/Tests): Edit Mode와 Play Mode에서 실행하는 기존 테스트
+
+GPU Compute Shader 예제와 달리 이 프로젝트는 CPU의 DOTS/Burst Job으로 Boids를 계산합니다. 계산 결과를 별도 배열에 기록한 뒤 Transform에 반영하며, WebGL에서는 같은 Job을 `Run`으로 실행합니다.
+
 ## Authoring 구조
 
 Play 전에도 카메라, 조명, corridor, 원형 pipe, short pipe 장식, bubble VFX와 HUD를 Scene View와 Hierarchy에서 확인할 수 있습니다.

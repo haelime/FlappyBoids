@@ -51,6 +51,7 @@ namespace FlappyBoids
             AdvanceLeader(ref control, parameters, deltaTime);
 
             state.Dependency.Complete();
+            // Snapshot every neighbor so the job reads positions and velocities from the same simulation step.
             int activeCount = _boidQuery.CalculateEntityCount();
             int index = 0;
             foreach ((RefRO<LocalTransform> transform, RefRO<BoidAgent> agent) in
@@ -284,6 +285,7 @@ namespace FlappyBoids
                 if (hit) commandBuffer.DestroyEntity(entity);
             }
 
+            // Apply removals after iteration so structural changes do not invalidate the query.
             commandBuffer.Playback(state.EntityManager);
             commandBuffer.Dispose();
             gates.Dispose();
